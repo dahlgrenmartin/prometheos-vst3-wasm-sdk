@@ -20,10 +20,19 @@ if(PVST_BUILD_TESTS)
   target_compile_features(abi_header_test PRIVATE cxx_std_17)
   target_link_libraries(abi_header_test PRIVATE prometheos_webvst_adapter)
   set(_pvst_abi_header_ctest_template [=[
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/Debug/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@")
-  add_test(abi_header
-    "${CMAKE_CURRENT_LIST_DIR}/Debug/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@")
-else()
+set(_pvst_abi_header_test_candidates
+  "@CMAKE_CURRENT_BINARY_DIR@/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@"
+  "@CMAKE_CURRENT_BINARY_DIR@/Debug/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@"
+)
+set(_pvst_abi_header_test_found FALSE)
+foreach(_pvst_abi_header_test IN LISTS _pvst_abi_header_test_candidates)
+  if(EXISTS "${_pvst_abi_header_test}")
+    add_test(abi_header "${_pvst_abi_header_test}")
+    set(_pvst_abi_header_test_found TRUE)
+    break()
+  endif()
+endforeach()
+if(NOT _pvst_abi_header_test_found)
   add_test(abi_header "@CMAKE_COMMAND@" -E false)
 endif()
 ]=]
