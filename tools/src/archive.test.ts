@@ -285,6 +285,24 @@ describe("packWebVst", () => {
     await expect(packWebVst(root)).rejects.toThrow(/class.*mismatch|vendor/i);
   });
 
+  it("accepts supported presentation curation in generated manifests", async () => {
+    const root = await staging();
+    const module = probeableWasm();
+    const base = manifest(module);
+    const value = manifest(module, {
+      classes: [{
+        ...base.classes[0],
+        exposedParameters: [{
+          ...base.classes[0].exposedParameters[0],
+          buzz: { ...base.classes[0].exposedParameters[0].buzz, name: "Curated name", description: "Curated description", display: { unit: "dB", precision: 1 } },
+        }],
+      }],
+    });
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+
+    await expect(packWebVst(root)).resolves.toBeInstanceOf(Uint8Array);
+  });
+
   it.each([
     ["resource", "licenses/data.bin", "resource"],
     ["preset", "resources/data.bin", "preset"],

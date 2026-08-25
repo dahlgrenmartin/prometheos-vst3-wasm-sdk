@@ -220,7 +220,7 @@ function expectedBuzzParameter(parameter: ProbedParameter): BuzzParameter {
 
 function verifyParameterDescriptor(classUid: string, parameter: ProbedParameter, buzz: BuzzParameter): void {
   const expected = expectedBuzzParameter(parameter);
-  if (buzz.type !== expected.type || buzz.name !== expected.name || buzz.description !== expected.description ||
+  if (buzz.type !== expected.type ||
       buzz.minValue !== expected.minValue || buzz.maxValue !== expected.maxValue || buzz.noValue !== expected.noValue ||
       buzz.defValue !== expected.defValue || buzz.flags !== expected.flags) {
     fail(`parameter mismatch for ${classUid}:${parameter.parameterId}`);
