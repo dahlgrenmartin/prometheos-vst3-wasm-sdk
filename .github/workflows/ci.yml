@@ -1,0 +1,111 @@
+name: WebVST SDK CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  EMSCRIPTEN_VERSION: 4.0.10
+  NINJA_VERSION: 1.11.1.3
+  PNPM_VERSION: 9.15.9
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tools/pnpm-lock.yaml
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up pinned Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Install pinned pnpm and Ninja
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare "pnpm@${PNPM_VERSION}" --activate
+          python -m pip install --disable-pip-version-check --target "${RUNNER_TEMP}/ninja" "ninja==${NINJA_VERSION}"
+          echo "${RUNNER_TEMP}/ninja/bin" >> "${GITHUB_PATH}"
+          echo "pnpm=$(pnpm --version)"
+          echo "ninja=$(ninja --version)"
+          emcc --version | head -n 1
+
+      - name: Install TypeScript tool dependencies
+        run: pnpm --dir tools install --frozen-lockfile
+
+      - name: Configure native sanitizer build
+        shell: bash
+        run: |
+          cmake -S . -B build/native -G Ninja \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            -DPVST_BUILD_TESTS=ON \
+            -DPVST_ENABLE_SANITIZERS=ON
+
+      - name: Build and test native adapter with sanitizers
+        run: |
+          cmake --build build/native --parallel
+          ctest --test-dir build/native --output-on-failure
+
+      - name: Configure Emscripten fixture build
+        shell: bash
+        run: |
+          cmake -S . -B build/wasm -G Ninja \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+            -DPVST_BUILD_FIXTURES=ON
+
+      - name: Build Emscripten fixture package
+        run: cmake --build build/wasm --target webvst_fixture_package --parallel
+
+      - name: Run TypeScript tests and typecheck
+        run: |
+          pnpm --dir tools test
+          pnpm --dir tools typecheck
+          pnpm --dir tools build
+
+      - name: Compare clean rebuild bytes
+        shell: bash
+        run: |
+          cp build/packages/prometheos-fixtures.webvst "${RUNNER_TEMP}/first.webvst"
+          sha256sum "${RUNNER_TEMP}/first.webvst"
+          rm -rf build/wasm build/packages
+          cmake -S . -B build/wasm -G Ninja \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+            -DPVST_BUILD_FIXTURES=ON
+          cmake --build build/wasm --target webvst_fixture_package --parallel
+          cmp --silent "${RUNNER_TEMP}/first.webvst" build/packages/prometheos-fixtures.webvst
+          sha256sum build/packages/prometheos-fixtures.webvst
+
+      - name: Run Emscripten package conformance
+        run: pnpm --dir tools test:conformance
+
+      - name: Upload SDK and fixture artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: webvst-sdk-ci
+          path: |
+            build/packages/prometheos-fixtures.webvst
+            schema/plugin.schema.json
+            include/prometheos/webvst.h
+            build/wasm/libprometheos_webvst_adapter.a
+            tools/dist/

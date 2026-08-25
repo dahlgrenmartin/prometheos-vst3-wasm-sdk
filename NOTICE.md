@@ -13,3 +13,8 @@ their copyright and license notices remain in the fetched source trees.
 
 The bootstrap does not fetch the unrelated `base`, `cmake`, `doc`,
 `public.sdk`, `tutorials`, or `vstgui4` submodules.
+
+SDK-owned source and documentation in this repository are MIT-licensed. The
+package suffix `.webvst` is used descriptively and is not presented as a
+trademark claim. A naming/trademark review remains required before any public
+release or tag; no tag is created by this repository.
