@@ -33,6 +33,7 @@ endif()
 
 if(PVST_BUILD_TESTS)
   enable_testing()
+  add_subdirectory(fixtures)
   add_executable(abi_header_test tests/native/abi_header_test.cpp)
   target_compile_features(abi_header_test PRIVATE cxx_std_17)
   target_link_libraries(abi_header_test PRIVATE prometheos_webvst_adapter)
@@ -45,12 +46,20 @@ if(PVST_BUILD_TESTS)
   target_include_directories(webvst_adapter_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/native ${PVST_VST3_SDK_DIR})
   target_link_libraries(webvst_adapter_tests PRIVATE prometheos_webvst_adapter)
+
+  add_executable(actual_vst3_fixture_test tests/native/actual_vst3_fixture_test.cpp)
+  target_compile_features(actual_vst3_fixture_test PRIVATE cxx_std_17)
+  target_include_directories(actual_vst3_fixture_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/native ${PVST_VST3_SDK_DIR})
+  target_link_libraries(actual_vst3_fixture_test PRIVATE
+    prometheos_webvst_adapter actual_vst3_fixture_factory)
+  add_test(NAME actual_vst3_fixture COMMAND actual_vst3_fixture_test)
   if(PVST_ENABLE_SANITIZERS AND MSVC)
     get_filename_component(_pvst_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set(_pvst_asan_runtimes
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dbg_dynamic-x86_64.dll"
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dynamic-x86_64.dll")
-    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests)
+    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests actual_vst3_fixture_test)
       foreach(_pvst_asan_runtime IN LISTS _pvst_asan_runtimes)
         if(EXISTS "${_pvst_asan_runtime}")
         add_custom_command(TARGET ${_pvst_sanitized_target} POST_BUILD
