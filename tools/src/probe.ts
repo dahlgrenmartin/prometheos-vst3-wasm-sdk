@@ -55,11 +55,11 @@ function finiteNormalized(value: number, label: string): number {
   return value;
 }
 
-function u32(value: number, label: string): number {
-  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
-    fail(`${label} must be an unsigned 32-bit integer`);
+function abiU32(value: number, label: string): number {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < -0x8000_0000 || value > 0x7fff_ffff) {
+    fail(`${label} must be a WebAssembly i32 result`);
   }
-  return value;
+  return value >>> 0;
 }
 
 function instantiateEnvironment() {
@@ -110,7 +110,7 @@ function readAbiString(
   if (!Number.isSafeInteger(size) || size < 0) fail(`${label} has invalid byte length`);
   if (size > MAX_STRING_BYTES) fail(`${label} exceeds the maximum ${MAX_STRING_BYTES}-byte string size`);
   if (size === 0) return "";
-  const pointer = u32(malloc(size), `${label} allocation pointer`);
+  const pointer = abiU32(malloc(size), `${label} allocation pointer`);
   if (pointer === 0) fail(`malloc failed while reading ${label}`);
   try {
     if (pointer > memory.buffer.byteLength || size > memory.buffer.byteLength - pointer) fail(`${label} allocation exceeds memory bounds`);
@@ -136,12 +136,12 @@ function probeParameter(
   parameterIndex: number,
 ): ProbedParameter {
   const call = (name: string) => requiredFunction(exports, name);
-  const parameterId = u32(call("pvst_class_param_id")(classIndex, parameterIndex), "parameter ID");
-  const flags = u32(call("pvst_class_param_flags")(classIndex, parameterIndex), `parameter ${parameterId} flags`);
-  const stepCount = u32(call("pvst_class_param_step_count")(classIndex, parameterIndex), `parameter ${parameterId} step count`);
+  const parameterId = abiU32(call("pvst_class_param_id")(classIndex, parameterIndex), "parameter ID");
+  const flags = abiU32(call("pvst_class_param_flags")(classIndex, parameterIndex), `parameter ${parameterId} flags`);
+  const stepCount = abiU32(call("pvst_class_param_step_count")(classIndex, parameterIndex), `parameter ${parameterId} step count`);
   if (stepCount > 65534) fail(`parameter ${parameterId} has unsupported step count ${stepCount}`);
   const defaultValue = finiteNormalized(call("pvst_class_param_default")(classIndex, parameterIndex), `parameter ${parameterId} default`);
-  const titleSize = u32(call("pvst_class_param_title_size")(classIndex, parameterIndex), `parameter ${parameterId} title size`);
+  const titleSize = abiU32(call("pvst_class_param_title_size")(classIndex, parameterIndex), `parameter ${parameterId} title size`);
   const title = readAbiString(memory, malloc, free, titleSize,
     (pointer, capacity) => call("pvst_class_param_title_write")(classIndex, parameterIndex, pointer, capacity),
     `parameter ${parameterId} title`);
@@ -149,7 +149,7 @@ function probeParameter(
   if (stepCount > 0) {
     for (let value = 0; value <= stepCount; value += 1) {
       const normalized = value / stepCount;
-      const size = u32(call("pvst_class_param_value_text_size")(classIndex, parameterIndex, normalized), `parameter ${parameterId} display value ${value} size`);
+      const size = abiU32(call("pvst_class_param_value_text_size")(classIndex, parameterIndex, normalized), `parameter ${parameterId} display value ${value} size`);
       displayValues.push(readAbiString(memory, malloc, free, size,
         (pointer, capacity) => call("pvst_class_param_value_text_write")(classIndex, parameterIndex, normalized, pointer, capacity),
         `parameter ${parameterId} display value ${value}`));
@@ -171,24 +171,24 @@ export async function probeWasm(wasm: Uint8Array): Promise<ProbedClass[]> {
   const memory = exports.memory;
   environment.bindMemory(memory);
   optionalFunction(exports, "_initialize")?.();
-  if (requiredFunction(exports, "pvst_abi_version")() !== 1) fail("ABI version is not 1");
+  if (abiU32(requiredFunction(exports, "pvst_abi_version")(), "ABI version") !== 1) fail("ABI version is not 1");
   const malloc = allocatorFunction(exports, "malloc");
   const free = allocatorFunction(exports, "free");
-  const count = u32(requiredFunction(exports, "pvst_class_count")(), "class count");
+  const count = abiU32(requiredFunction(exports, "pvst_class_count")(), "class count");
   if (count > MAX_CLASS_COUNT) fail(`class count exceeds the maximum ${MAX_CLASS_COUNT}`);
   const classes: ProbedClass[] = [];
   const classUids = new Set<string>();
   for (let classIndex = 0; classIndex < count; classIndex += 1) {
     const call = (name: string) => requiredFunction(exports, name);
-    const uid = validatedUid(readAbiString(memory, malloc, free, u32(call("pvst_class_uid_size")(classIndex), `class ${classIndex} UID size`),
+    const uid = validatedUid(readAbiString(memory, malloc, free, abiU32(call("pvst_class_uid_size")(classIndex), `class ${classIndex} UID size`),
       (pointer, capacity) => call("pvst_class_uid_write")(classIndex, pointer, capacity), `class ${classIndex} UID`));
     if (classUids.has(uid)) fail(`duplicate class UID ${uid}`);
     classUids.add(uid);
-    const name = readAbiString(memory, malloc, free, u32(call("pvst_class_name_size")(classIndex), `class ${uid} name size`),
+    const name = readAbiString(memory, malloc, free, abiU32(call("pvst_class_name_size")(classIndex), `class ${uid} name size`),
       (pointer, capacity) => call("pvst_class_name_write")(classIndex, pointer, capacity), `class ${uid} name`);
-    const vendor = readAbiString(memory, malloc, free, u32(call("pvst_class_vendor_size")(classIndex), `class ${uid} vendor size`),
+    const vendor = readAbiString(memory, malloc, free, abiU32(call("pvst_class_vendor_size")(classIndex), `class ${uid} vendor size`),
       (pointer, capacity) => call("pvst_class_vendor_write")(classIndex, pointer, capacity), `class ${uid} vendor`);
-    const parameterCount = u32(call("pvst_class_param_count")(classIndex), `class ${uid} parameter count`);
+    const parameterCount = abiU32(call("pvst_class_param_count")(classIndex), `class ${uid} parameter count`);
     if (parameterCount > MAX_PARAMETER_COUNT) fail(`class ${uid} parameter count exceeds the maximum ${MAX_PARAMETER_COUNT}`);
     const parameterIds = new Set<number>();
     const parameters: ProbedParameter[] = [];
@@ -198,7 +198,7 @@ export async function probeWasm(wasm: Uint8Array): Promise<ProbedClass[]> {
       parameterIds.add(parameter.parameterId);
       parameters.push(parameter);
     }
-    const kind = u32(call("pvst_class_kind")(classIndex), `class ${uid} kind`);
+    const kind = abiU32(call("pvst_class_kind")(classIndex), `class ${uid} kind`);
     if (kind !== 0 && kind !== 1) fail(`class ${uid} has unsupported kind ${kind}`);
     classes.push({ classUid: uid, name, vendor, kind: kind === 1 ? "instrument" : "effect", parameters });
   }

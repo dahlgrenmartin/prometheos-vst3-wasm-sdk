@@ -128,9 +128,10 @@ function standaloneProbeWasm(): Uint8Array {
   const types = section(1, vector([
     functionType([], []), functionType([], [0x7f]), functionType([0x7f], [0x7f]),
     functionType([0x7f, 0x7f, 0x7f], [0x7f]), functionType([0x7f], []),
+    functionType([0x7f, 0x7f], [0x7f]), functionType([0x7f, 0x7f], [0x7d]),
   ]));
   const imports = section(2, vector([[...name("env"), ...name("emscripten_notify_memory_growth"), 0, 0]]));
-  const functionTypes = [0, 2, 4, 1, 1, 2, 3, 2, 3, 2, 3, 2, 2].map((type) => u32(type));
+  const functionTypes = [0, 2, 4, 1, 1, 2, 3, 2, 3, 2, 3, 2, 2, 5, 5, 5, 6, 5].map((type) => u32(type));
   const functions = section(3, vector(functionTypes));
   const memory = section(5, vector([[0, 1]]));
   const globals = section(6, vector([[0x7f, 1, ...i32const(0), 0x0b]]));
@@ -138,13 +139,16 @@ function standaloneProbeWasm(): Uint8Array {
     ["memory", 2, 0], ["_initialize", 0, 1], ["malloc", 0, 2], ["free", 0, 3],
     ["pvst_abi_version", 0, 4], ["pvst_class_count", 0, 5], ["pvst_class_uid_size", 0, 6], ["pvst_class_uid_write", 0, 7],
     ["pvst_class_name_size", 0, 8], ["pvst_class_name_write", 0, 9], ["pvst_class_vendor_size", 0, 10], ["pvst_class_vendor_write", 0, 11],
-    ["pvst_class_kind", 0, 12], ["pvst_class_param_count", 0, 13],
+    ["pvst_class_kind", 0, 12], ["pvst_class_param_count", 0, 13], ["pvst_class_param_id", 0, 14],
+    ["pvst_class_param_flags", 0, 15], ["pvst_class_param_step_count", 0, 16], ["pvst_class_param_default", 0, 17],
+    ["pvst_class_param_title_size", 0, 18],
   ].map(([label, kind, index]) => [...name(label as string), kind as number, ...u32(index as number)]);
   const exportSection = section(7, vector(exports));
   const code = section(10, vector([
     body([0x23, 0, ...i32const(1), 0x6a, 0x24, 0]), body(i32const(512)), body([]), body(i32const(1)),
     body([0x23, 0, ...i32const(1), 0x46]), body(i32const(32)), body(writeUid), body(i32const(0)), body(i32const(0)),
-    body(i32const(0)), body(i32const(0)), body(i32const(1)), body(i32const(0)),
+    body(i32const(0)), body(i32const(0)), body(i32const(1)), body(i32const(1)), body(i32const(-1)),
+    body(i32const(1)), body(i32const(0)), body([0x43, 0, 0, 0, 0]), body(i32const(0)),
   ]));
   const data = section(11, vector([[0, ...i32const(64), 0x0b, ...u32(uid.length), ...uid]]));
   return new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, ...types, ...imports, ...functions, ...memory, ...globals, ...exportSection, ...code, ...data]);
@@ -247,7 +251,14 @@ describe("generateManifest", () => {
       name: "",
       vendor: "",
       kind: "instrument",
-      parameters: [],
+      parameters: [{
+        parameterId: 0xffff_ffff,
+        flags: 1,
+        stepCount: 0,
+        defaultValue: 0,
+        title: "",
+        displayValues: [],
+      }],
     }]);
   });
 
@@ -275,20 +286,27 @@ describe("generateManifest", () => {
     } as never)).rejects.toThrow("curation");
   });
 
-  it("rejects non-u32 parameter IDs before indexing them", async () => {
-    installWasmProbe([{ ...twoClasses[0], parameters: [{ ...twoClasses[0].parameters[0], id: -1 }] }]);
-
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
-      .rejects.toThrow("parameter ID");
+  it("rejects malformed author parameter IDs without coercion", async () => {
+    for (const id of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 0x1_0000_0000]) {
+      await expect(generateManifest({
+        wasm: wasmBytes,
+        packageId: "org.prometheos.fixtures",
+        version: "1.0.0",
+        modulePath: "plugin.wasm",
+        curation: [{ classUid: canonicalInstrument, parameterId: id }],
+      } as never))
+        .rejects.toThrow("curation");
+    }
   });
 
-  it("rejects fractional, nonfinite, and out-of-range parameter IDs", async () => {
-    for (const id of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 0x1_0000_0000]) {
-      installWasmProbe([{ ...twoClasses[0], parameters: [{ ...twoClasses[0].parameters[0], id }] }]);
-      await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
-        .rejects.toThrow("parameter ID");
-      vi.restoreAllMocks();
-    }
+  it("rejects negative author parameter IDs without reinterpreting them", async () => {
+    await expect(generateManifest({
+      wasm: wasmBytes,
+      packageId: "org.prometheos.fixtures",
+      version: "1.0.0",
+      modulePath: "plugin.wasm",
+      curation: [{ classUid: canonicalInstrument, parameterId: -1 }],
+    } as never)).rejects.toThrow("curation");
   });
 
   it("maps 254 discrete steps to byte and 255 steps to word", async () => {
