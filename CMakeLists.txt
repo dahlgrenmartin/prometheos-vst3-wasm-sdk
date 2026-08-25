@@ -21,15 +21,19 @@ target_include_directories(prometheos_webvst_adapter
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   PRIVATE ${PVST_VST3_SDK_DIR}
 )
-if(PVST_ENABLE_SANITIZERS)
-  if(MSVC)
-    target_compile_options(prometheos_webvst_adapter PUBLIC /fsanitize=address)
-    target_link_options(prometheos_webvst_adapter INTERFACE /INCREMENTAL:NO)
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(prometheos_webvst_adapter PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(prometheos_webvst_adapter INTERFACE -fsanitize=address,undefined)
+function(pvst_enable_sanitizers target visibility)
+  if(NOT PVST_ENABLE_SANITIZERS)
+    return()
   endif()
-endif()
+  if(MSVC)
+    target_compile_options(${target} ${visibility} /fsanitize=address)
+    target_link_options(${target} INTERFACE /INCREMENTAL:NO)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(${target} ${visibility} -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(${target} INTERFACE -fsanitize=address,undefined)
+  endif()
+endfunction()
+pvst_enable_sanitizers(prometheos_webvst_adapter PUBLIC)
 
 if(PVST_BUILD_TESTS)
   enable_testing()
@@ -54,12 +58,20 @@ if(PVST_BUILD_TESTS)
   target_link_libraries(actual_vst3_fixture_test PRIVATE
     prometheos_webvst_adapter actual_vst3_fixture_factory)
   add_test(NAME actual_vst3_fixture COMMAND actual_vst3_fixture_test)
+
+  add_executable(actual_vst3_component_test tests/native/actual_vst3_component_test.cpp)
+  target_compile_features(actual_vst3_component_test PRIVATE cxx_std_17)
+  target_include_directories(actual_vst3_component_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR} ${PVST_VST3_SDK_DIR})
+  target_link_libraries(actual_vst3_component_test PRIVATE
+    prometheos_webvst_adapter actual_vst3_fixture_factory)
+  add_test(NAME actual_vst3_component COMMAND actual_vst3_component_test)
   if(PVST_ENABLE_SANITIZERS AND MSVC)
     get_filename_component(_pvst_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set(_pvst_asan_runtimes
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dbg_dynamic-x86_64.dll"
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dynamic-x86_64.dll")
-    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests actual_vst3_fixture_test)
+    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests actual_vst3_fixture_test actual_vst3_component_test)
       foreach(_pvst_asan_runtime IN LISTS _pvst_asan_runtimes)
         if(EXISTS "${_pvst_asan_runtime}")
         add_custom_command(TARGET ${_pvst_sanitized_target} POST_BUILD

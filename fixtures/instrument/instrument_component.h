@@ -36,6 +36,7 @@ private:
   double gain_ {1.};
   float velocity_ {};
   int note_ {69};
+  Steinberg::int32 note_id_ {-1};
   bool playing_ {};
 };
 } // namespace prometheos::fixtures

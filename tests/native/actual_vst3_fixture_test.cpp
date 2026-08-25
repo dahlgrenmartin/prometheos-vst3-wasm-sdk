@@ -62,6 +62,23 @@ void effect_applies_its_gain_to_both_stereo_channels () {
   pvst_destroy (effect);
 }
 
+void effect_applies_gain_when_interleaved_input_and_output_alias () {
+  std::array<float, 256> interleaved {};
+  for (uint32_t frame = 0; frame < 128; ++frame) {
+    interleaved[frame * 2] = .25f;
+    interleaved[frame * 2 + 1] = -.5f;
+  }
+  const auto effect = pvst_create (1, 48000., 128);
+  require (effect != 0);
+  require (pvst_param_set (effect, 0x2001, .5f) == PVST_OK);
+  require (pvst_process (effect, interleaved.data (), interleaved.data (), 128) == PVST_OK);
+  require (interleaved[0] == .125f);
+  require (interleaved[1] == -.25f);
+  require (interleaved[254] == .125f);
+  require (interleaved[255] == -.25f);
+  pvst_destroy (effect);
+}
+
 void controllers_expose_stable_automatable_gain_parameters () {
   require (pvst_class_param_count (0) == 1);
   require (pvst_class_param_id (0, 0) == 0x1001);
@@ -95,6 +112,7 @@ int main () {
   actual_vst3_factory_exposes_two_canonical_audio_classes ();
   instrument_generates_audio_after_a_vst3_note_event ();
   effect_applies_its_gain_to_both_stereo_channels ();
+  effect_applies_gain_when_interleaved_input_and_output_alias ();
   controllers_expose_stable_automatable_gain_parameters ();
   instrument_parameter_state_restores_through_the_public_abi ();
   return 0;

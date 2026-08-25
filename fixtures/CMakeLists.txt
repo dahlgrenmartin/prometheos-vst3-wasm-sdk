@@ -10,3 +10,4 @@ target_include_directories(actual_vst3_fixture_factory PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${PVST_VST3_SDK_DIR}
 )
+pvst_enable_sanitizers(actual_vst3_fixture_factory PRIVATE)
