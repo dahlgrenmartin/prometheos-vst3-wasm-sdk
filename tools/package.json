@@ -2,9 +2,14 @@
   "name": "@prometheos/webvst-tools",
   "private": true,
   "type": "module",
+  "bin": {
+    "webvst": "dist/cli.js"
+  },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --outDir dist --noEmit false",
+    "webvst": "pnpm run build && node dist/cli.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
