@@ -20,6 +20,8 @@ inline bool same (const TUID a, const TUID b) { return std::memcmp (a, b, 16) ==
 inline constexpr TUID kSynthCid = INLINE_UID (0x10203040, 0x50607080, 0x90A0B0C0, 0xD0E0F001);
 inline constexpr TUID kEffectCid = INLINE_UID (0x10203041, 0x50607080, 0x90A0B0C0, 0xD0E0F002);
 constexpr ParamID kGainId = 71;
+struct FailureControl { bool fail_second_connect {}, fail_bus_activate {}, fail_component_active {}, fail_processing {}, fail_state {}; int connects {}, disconnects {}, state_calls {}, activations {}; void reset () { *this = {}; } };
+inline FailureControl failures;
 
 class Plugin final : public IComponent, public IAudioProcessor, public IEditController, public IConnectionPoint {
 public:
@@ -45,15 +47,15 @@ public:
     info = {}; info.mediaType = type; info.direction = dir; info.channelCount = type == kAudio ? 2 : 16; info.busType = kMain; info.flags = BusInfo::kDefaultActive; return kResultOk;
   }
   tresult PLUGIN_API getRoutingInfo (RoutingInfo&, RoutingInfo&) override { return kResultFalse; }
-  tresult PLUGIN_API activateBus (MediaType, BusDirection, int32, TBool) override { return kResultOk; }
-  tresult PLUGIN_API setActive (TBool) override { return kResultOk; }
+  tresult PLUGIN_API activateBus (MediaType, BusDirection, int32, TBool state) override { if (state) { ++failures.activations; if (failures.fail_bus_activate) return kResultFalse; } return kResultOk; }
+  tresult PLUGIN_API setActive (TBool state) override { return state && failures.fail_component_active ? kResultFalse : kResultOk; }
   tresult PLUGIN_API getState (IBStream* stream) override { return writeValue (stream); }
   tresult PLUGIN_API setBusArrangements (SpeakerArrangement*, int32 ins, SpeakerArrangement*, int32 outs) override { return outs == 1 && (synth_ ? ins == 0 : ins == 1) ? kResultTrue : kResultFalse; }
   tresult PLUGIN_API getBusArrangement (BusDirection, int32 index, SpeakerArrangement& arrangement) override { if (index) return kResultFalse; arrangement = SpeakerArr::kStereo; return kResultOk; }
   tresult PLUGIN_API canProcessSampleSize (int32 size) override { return size == kSample32 ? kResultTrue : kResultFalse; }
   uint32 PLUGIN_API getLatencySamples () override { return 0; }
   tresult PLUGIN_API setupProcessing (ProcessSetup&) override { return kResultOk; }
-  tresult PLUGIN_API setProcessing (TBool) override { return kResultOk; }
+  tresult PLUGIN_API setProcessing (TBool state) override { return state && failures.fail_processing ? kResultFalse : kResultOk; }
   tresult PLUGIN_API process (ProcessData& data) override {
     if (!data.outputs || !data.outputs[0].channelBuffers32) return kInvalidArgument;
     const bool playing = data.inputEvents && data.inputEvents->getEventCount () > 0;
@@ -62,8 +64,8 @@ public:
     return kResultOk;
   }
   uint32 PLUGIN_API getTailSamples () override { return 0; }
-  tresult PLUGIN_API setComponentState (IBStream* stream) override { return readValue (stream); }
-  tresult PLUGIN_API setState (IBStream* stream) override { return readValue (stream); }
+  tresult PLUGIN_API setComponentState (IBStream* stream) override { ++failures.state_calls; return failures.fail_state ? kResultFalse : readValue (stream); }
+  tresult PLUGIN_API setState (IBStream* stream) override { ++failures.state_calls; return failures.fail_state ? kResultFalse : readValue (stream); }
   int32 PLUGIN_API getParameterCount () override { return 1; }
   tresult PLUGIN_API getParameterInfo (int32 index, ParameterInfo& info) override { if (index) return kResultFalse; info = {}; info.id = kGainId; info.stepCount = 0; info.defaultNormalizedValue = .25; info.flags = ParameterInfo::kCanAutomate; std::u16string name = u"Gain"; std::copy (name.begin (), name.end (), info.title); return kResultOk; }
   tresult PLUGIN_API getParamStringByValue (ParamID, ParamValue, String128 text) override { text[0] = u'0'; text[1] = u'.'; text[2] = u'7'; text[3] = u'5'; text[4] = 0; return kResultOk; }
@@ -74,8 +76,8 @@ public:
   tresult PLUGIN_API setParamNormalized (ParamID id, ParamValue value) override { if (id != kGainId) return kResultFalse; gain_ = std::clamp (value, 0., 1.); return kResultOk; }
   tresult PLUGIN_API setComponentHandler (IComponentHandler*) override { return kResultOk; }
   IPlugView* PLUGIN_API createView (FIDString) override { return nullptr; }
-  tresult PLUGIN_API connect (IConnectionPoint*) override { return kResultOk; }
-  tresult PLUGIN_API disconnect (IConnectionPoint*) override { return kResultOk; }
+  tresult PLUGIN_API connect (IConnectionPoint*) override { ++failures.connects; return failures.fail_second_connect && failures.connects == 2 ? kResultFalse : kResultOk; }
+  tresult PLUGIN_API disconnect (IConnectionPoint*) override { ++failures.disconnects; return kResultOk; }
   tresult PLUGIN_API notify (IMessage*) override { return kResultOk; }
 private:
   tresult writeValue (IBStream* stream) { int32 written = 0; return stream->write (&gain_, sizeof gain_, &written) == kResultOk && written == sizeof gain_ ? kResultOk : kResultFalse; }

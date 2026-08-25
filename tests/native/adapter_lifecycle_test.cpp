@@ -14,5 +14,6 @@ int lifecycle_test () {
   const auto synth = pvst_create (0, 48000.0, 128); assert (synth != 0);
   assert (pvst_create (2, 48000.0, 128) == 0);
   assert (pvst_create (0, NAN, 128) == 0);
-  pvst_destroy (synth); assert (pvst_reset (synth) == PVST_ERROR_HANDLE); assert (fake_vst3::factory.refs () == 1); return 0;
+  pvst_destroy (synth); assert (pvst_reset (synth) == PVST_ERROR_HANDLE); assert (fake_vst3::factory.refs () == 1);
+  fake_vst3::failures.reset (); fake_vst3::failures.fail_second_connect = true; assert (pvst_create (0,48000.,128) == 0); assert (fake_vst3::failures.connects == 2 && fake_vst3::failures.disconnects == 1); return 0;
 }

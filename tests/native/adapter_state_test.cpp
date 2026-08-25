@@ -17,6 +17,8 @@ int main () {
   const auto second = pvst_create (0, 48000.0, 128); assert (second != 0);
   assert (pvst_state_load (second, bytes.data (), size) == PVST_OK);
   assert (pvst_param_get (second, fake_vst3::kGainId) == .75f);
+  fake_vst3::failures.reset (); fake_vst3::failures.fail_state = true; assert (pvst_state_load (second, bytes.data (), size) == PVST_ERROR_PLUGIN); fake_vst3::failures.reset ();
   assert (pvst_state_load (second, bytes.data (), 3) == PVST_ERROR_ARGUMENT);
+  assert (fake_vst3::failures.state_calls == 0);
   pvst_destroy (first); pvst_destroy (second);
 }
