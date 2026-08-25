@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { ALLOWED_WASM_IMPORTS, loadFixturePackage } from "./package_consumer.js";
+import { ALLOWED_WASM_IMPORTS } from "./package_consumer.js";
+import { loadFixturePackage } from "./fixture_package_harness.js";
 
 const packagePath = new URL("../../build/packages/prometheos-fixtures.webvst", import.meta.url);
 
