@@ -1,24 +1,106 @@
 #define PVST_DEFINE_FAKE_FACTORY
 #include "fake_factory.h"
+
 #include <array>
-#include <cassert>
+#include <cstdio>
 #include <cstdlib>
-#undef assert
-#define assert(condition) do { if (!(condition)) std::abort (); } while (false)
+#include <cstring>
+
+namespace {
+void require_at (bool condition, int line) { if (!condition) { std::fprintf (stderr, "state requirement failed at line %d\n", line); std::abort (); } }
+#define require(condition) require_at ((condition), __LINE__)
+
+uint32_t read_u32 (const unsigned char* bytes) {
+  uint32_t result {};
+  std::memcpy (&result, bytes, sizeof result);
+  return result;
+}
+
+void write_u32 (unsigned char* bytes, uint32_t value) {
+  std::memcpy (bytes, &value, sizeof value);
+}
+
+int state_call_count () {
+  using fake_vst3::Call;
+  return fake_vst3::failures.count (Call::ComponentStateLoad) +
+         fake_vst3::failures.count (Call::ControllerComponentStateLoad) +
+         fake_vst3::failures.count (Call::ControllerStateLoad);
+}
+
+void require_state_calls (std::initializer_list<fake_vst3::Call> expected) {
+  require (fake_vst3::failures.call_count == expected.size ());
+  size_t index = 0;
+  for (const auto call : expected) require (fake_vst3::failures.calls[index++] == call);
+}
+} // namespace
+
 int process_test ();
 int lifecycle_test ();
+
 int main () {
   lifecycle_test ();
   process_test ();
-  const auto first = pvst_create (0, 48000.0, 128); assert (first != 0);
-  assert (pvst_param_set (first, fake_vst3::kGainId, .75f) == PVST_OK);
-  const auto size = pvst_state_size (first); assert (size > 16);
-  std::array<unsigned char, 256> bytes {}; assert (pvst_state_write (first, bytes.data (), size) == PVST_OK);
-  const auto second = pvst_create (0, 48000.0, 128); assert (second != 0);
-  assert (pvst_state_load (second, bytes.data (), size) == PVST_OK);
-  assert (pvst_param_get (second, fake_vst3::kGainId) == .75f);
-  fake_vst3::failures.reset (); fake_vst3::failures.fail_state = true; assert (pvst_state_load (second, bytes.data (), size) == PVST_ERROR_PLUGIN); fake_vst3::failures.reset ();
-  assert (pvst_state_load (second, bytes.data (), 3) == PVST_ERROR_ARGUMENT);
-  assert (fake_vst3::failures.state_calls == 0);
-  pvst_destroy (first); pvst_destroy (second);
+
+  fake_vst3::failures.reset ();
+  const auto first = pvst_create (0, 48000., 128);
+  require (first != 0);
+  require (pvst_param_set (first, fake_vst3::kGainId, .75f) == PVST_OK);
+  const auto size = pvst_state_size (first);
+  require (size == 16 + sizeof (double) + sizeof (uint64_t) + sizeof (double));
+  std::array<unsigned char, 256> bytes {};
+  require (pvst_state_write (first, bytes.data (), size) == PVST_OK);
+  require (read_u32 (bytes.data () + 8) == sizeof (double));
+  require (read_u32 (bytes.data () + 12) == sizeof (uint64_t) + sizeof (double));
+
+  const auto second = pvst_create (0, 48000., 128);
+  require (second != 0);
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (second, bytes.data (), size) == PVST_OK);
+  require_state_calls ({fake_vst3::Call::ComponentStateLoad,
+                        fake_vst3::Call::ControllerComponentStateLoad,
+                        fake_vst3::Call::ControllerStateLoad});
+  require (pvst_param_get (second, fake_vst3::kGainId) == .75f);
+
+  constexpr std::array state_failures {
+    fake_vst3::FailurePoint::ComponentStateLoad,
+    fake_vst3::FailurePoint::ControllerComponentStateLoad,
+    fake_vst3::FailurePoint::ControllerStateLoad,
+  };
+  constexpr std::array state_calls {
+    fake_vst3::Call::ComponentStateLoad,
+    fake_vst3::Call::ControllerComponentStateLoad,
+    fake_vst3::Call::ControllerStateLoad,
+  };
+  for (size_t failure_index = 0; failure_index < state_failures.size (); ++failure_index) {
+    const auto failure = state_failures[failure_index];
+    fake_vst3::failures.fail_at = failure;
+    fake_vst3::failures.clear_calls ();
+    require (pvst_state_load (second, bytes.data (), size) == PVST_ERROR_PLUGIN);
+    require (state_call_count () == static_cast<int> (failure_index + 1));
+    require (fake_vst3::failures.call_count == failure_index + 1);
+    for (size_t call_index = 0; call_index <= failure_index; ++call_index)
+      require (fake_vst3::failures.calls[call_index] == state_calls[call_index]);
+  }
+  fake_vst3::failures.fail_at = fake_vst3::FailurePoint::None;
+
+  auto malformed = bytes;
+  write_u32 (malformed.data () + 8, read_u32 (malformed.data () + 8) - 1);
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (second, malformed.data (), size) == PVST_ERROR_ARGUMENT);
+  require (state_call_count () == 0);
+
+  malformed = bytes;
+  write_u32 (malformed.data () + 12, read_u32 (malformed.data () + 12) - 1);
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (second, malformed.data (), size) == PVST_ERROR_ARGUMENT);
+  require (state_call_count () == 0);
+
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (second, bytes.data (), 3) == PVST_ERROR_ARGUMENT);
+  require (state_call_count () == 0);
+
+  pvst_destroy (first);
+  pvst_destroy (second);
+  require (fake_vst3::failures.live_objects == 0);
+  return 0;
 }

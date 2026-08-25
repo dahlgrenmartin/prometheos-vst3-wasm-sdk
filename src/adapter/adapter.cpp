@@ -1,5 +1,6 @@
 #include "adapter.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -7,7 +8,57 @@
 extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory ();
 namespace pvst {
 using namespace Steinberg; using namespace Steinberg::Vst;
-namespace { bool audio_class (IPluginFactory* factory, int32 raw, PClassInfo& info) { return factory && factory->getClassInfo (raw, &info) == kResultOk && std::strcmp (info.category, kVstAudioEffectClass) == 0; } uint32_t write_text (const char* text, char* dst, uint32_t capacity) { const auto size = static_cast<uint32_t> (std::strlen (text) + 1); if (!dst || capacity < size) return 0; std::memcpy (dst, text, size); return size; } uint32_t size_text (const char* text) { return text ? static_cast<uint32_t> (std::strlen (text) + 1) : 0; } }
+namespace {
+bool audio_class (IPluginFactory* factory, int32 raw, PClassInfo& info) { return factory && factory->getClassInfo (raw, &info) == kResultOk && std::strcmp (info.category, kVstAudioEffectClass) == 0; }
+uint32_t write_text (const char* text, char* dst, uint32_t capacity) { const auto size = static_cast<uint32_t> (std::strlen (text) + 1); if (!dst || capacity < size) return 0; std::memcpy (dst, text, size); return size; }
+uint32_t size_text (const char* text) { return text ? static_cast<uint32_t> (std::strlen (text) + 1) : 0; }
+
+struct Utf8Text {
+  std::array<char, 513> bytes {};
+  uint32_t size {};
+};
+
+bool utf16_to_utf8 (const TChar* source, uint32_t capacity, Utf8Text& result) {
+  result = {};
+  for (uint32_t index = 0; index < capacity; ++index) {
+    uint32_t codepoint = static_cast<uint16_t> (source[index]);
+    if (codepoint == 0) {
+      result.bytes[result.size++] = 0;
+      return true;
+    }
+    if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
+      if (++index >= capacity) return false;
+      const auto low = static_cast<uint16_t> (source[index]);
+      if (low < 0xdc00 || low > 0xdfff) return false;
+      codepoint = 0x10000u + ((codepoint - 0xd800u) << 10u) + (low - 0xdc00u);
+    } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
+      return false;
+    }
+
+    const auto remaining = result.bytes.size () - result.size;
+    if (codepoint <= 0x7f) {
+      if (remaining < 1) return false;
+      result.bytes[result.size++] = static_cast<char> (codepoint);
+    } else if (codepoint <= 0x7ff) {
+      if (remaining < 2) return false;
+      result.bytes[result.size++] = static_cast<char> (0xc0u | (codepoint >> 6u));
+      result.bytes[result.size++] = static_cast<char> (0x80u | (codepoint & 0x3fu));
+    } else if (codepoint <= 0xffff) {
+      if (remaining < 3) return false;
+      result.bytes[result.size++] = static_cast<char> (0xe0u | (codepoint >> 12u));
+      result.bytes[result.size++] = static_cast<char> (0x80u | ((codepoint >> 6u) & 0x3fu));
+      result.bytes[result.size++] = static_cast<char> (0x80u | (codepoint & 0x3fu));
+    } else {
+      if (remaining < 4) return false;
+      result.bytes[result.size++] = static_cast<char> (0xf0u | (codepoint >> 18u));
+      result.bytes[result.size++] = static_cast<char> (0x80u | ((codepoint >> 12u) & 0x3fu));
+      result.bytes[result.size++] = static_cast<char> (0x80u | ((codepoint >> 6u) & 0x3fu));
+      result.bytes[result.size++] = static_cast<char> (0x80u | (codepoint & 0x3fu));
+    }
+  }
+  return false;
+}
+}
 Adapter& adapter () { static Adapter value; return value; }
 uint32_t Adapter::class_count () const { auto* factory = GetPluginFactory (); if (!factory) return 0; uint32_t count = 0; for (int32 raw = 0; raw < factory->countClasses (); ++raw) { PClassInfo info {}; if (audio_class (factory, raw, info)) ++count; } factory->release (); return count; }
 bool Adapter::class_id (uint32_t visible, TUID id) const { auto* factory = GetPluginFactory (); if (!factory) return false; uint32_t seen = 0; bool found = false; for (int32 raw = 0; raw < factory->countClasses (); ++raw) { PClassInfo info {}; if (audio_class (factory, raw, info) && seen++ == visible) { std::memcpy (id, info.cid, 16); found = true; break; } } factory->release (); return found; }
@@ -24,10 +75,10 @@ uint32_t Adapter::class_param_id (uint32_t index,uint32_t parameter) const { Par
 uint32_t Adapter::class_param_flags (uint32_t index,uint32_t parameter) const { ParameterInfo info{}; if(!parameter_info(index,parameter,info))return 0; return (info.flags&ParameterInfo::kCanAutomate?PVST_PARAMETER_AUTOMATABLE:0)|(info.flags&ParameterInfo::kIsReadOnly?PVST_PARAMETER_READ_ONLY:0); }
 uint32_t Adapter::class_param_step_count (uint32_t index,uint32_t parameter) const { ParameterInfo info{}; return parameter_info(index,parameter,info)?static_cast<uint32_t>(info.stepCount):0; }
 float Adapter::class_param_default (uint32_t index,uint32_t parameter) const { ParameterInfo info{}; return parameter_info(index,parameter,info)?static_cast<float>(info.defaultNormalizedValue):0.f; }
-uint32_t Adapter::class_param_title_size (uint32_t index,uint32_t parameter) const { ParameterInfo info{}; if(!parameter_info(index,parameter,info))return 0; uint32_t n=0;while(n<128&&info.title[n])++n;return n+1; }
-int32_t Adapter::class_param_title_write(uint32_t index,uint32_t parameter,char*dst,uint32_t cap)const{ParameterInfo info{};if(!parameter_info(index,parameter,info))return PVST_ERROR_ARGUMENT;uint32_t n=0;while(n<128&&info.title[n])++n;if(!dst||cap<n+1)return PVST_ERROR_BUFFER_TOO_SMALL;for(uint32_t i=0;i<n;++i)dst[i]=static_cast<char>(info.title[i]);dst[n]=0;return PVST_OK;}
-uint32_t Adapter::class_param_value_text_size (uint32_t index, uint32_t parameter, float value) const { ParameterInfo info {}; TUID id {}; if (!std::isfinite (value) || !parameter_info (index, parameter, info) || !class_id (index, id)) return 0; auto instance = Vst3Instance::create (id, 48000., 128); String128 text {}; if (!instance || !instance->parameter_value_text (info.id, value, text)) return 0; uint32_t n = 0; while (n < 128 && text[n]) ++n; return n + 1; }
-int32_t Adapter::class_param_value_text_write (uint32_t index, uint32_t parameter, float value, char* dst, uint32_t capacity) const { ParameterInfo info {}; TUID id {}; if (!std::isfinite (value) || !parameter_info (index, parameter, info) || !class_id (index, id)) return PVST_ERROR_ARGUMENT; auto instance = Vst3Instance::create (id, 48000., 128); String128 text {}; if (!instance || !instance->parameter_value_text (info.id, value, text)) return PVST_ERROR_PLUGIN; uint32_t n = 0; while (n < 128 && text[n]) ++n; if (!dst || capacity < n + 1) return PVST_ERROR_BUFFER_TOO_SMALL; for (uint32_t i = 0; i < n; ++i) dst[i] = static_cast<char> (text[i]); dst[n] = 0; return PVST_OK; }
+uint32_t Adapter::class_param_title_size (uint32_t index,uint32_t parameter) const { ParameterInfo info{}; Utf8Text text; return parameter_info(index,parameter,info) && utf16_to_utf8(info.title,128,text) ? text.size : 0; }
+int32_t Adapter::class_param_title_write(uint32_t index,uint32_t parameter,char*dst,uint32_t cap)const{ParameterInfo info{};if(!parameter_info(index,parameter,info))return PVST_ERROR_ARGUMENT;Utf8Text text;if(!utf16_to_utf8(info.title,128,text))return PVST_ERROR_PLUGIN;if(!dst||cap<text.size)return PVST_ERROR_BUFFER_TOO_SMALL;std::memcpy(dst,text.bytes.data(),text.size);return PVST_OK;}
+uint32_t Adapter::class_param_value_text_size (uint32_t index, uint32_t parameter, float value) const { ParameterInfo info {}; TUID id {}; if (!std::isfinite (value) || !parameter_info (index, parameter, info) || !class_id (index, id)) return 0; auto instance = Vst3Instance::create (id, 48000., 128); String128 source {}; Utf8Text text; return instance && instance->parameter_value_text (info.id, value, source) && utf16_to_utf8(source,128,text) ? text.size : 0; }
+int32_t Adapter::class_param_value_text_write (uint32_t index, uint32_t parameter, float value, char* dst, uint32_t capacity) const { ParameterInfo info {}; TUID id {}; if (!std::isfinite (value) || !parameter_info (index, parameter, info) || !class_id (index, id)) return PVST_ERROR_ARGUMENT; auto instance = Vst3Instance::create (id, 48000., 128); String128 source {}; Utf8Text text; if (!instance || !instance->parameter_value_text (info.id, value, source) || !utf16_to_utf8(source,128,text)) return PVST_ERROR_PLUGIN; if (!dst || capacity < text.size) return PVST_ERROR_BUFFER_TOO_SMALL; std::memcpy(dst,text.bytes.data(),text.size); return PVST_OK; }
 uint32_t Adapter::create(uint32_t index,double rate,uint32_t frames){TUID id{};if(!class_id(index,id)||!std::isfinite(rate)||rate<=0||frames==0||frames>PVST_MAX_PROCESS_FRAMES)return 0;for(uint32_t i=0;i<kSlots;++i)if(!slots_[i].instance){auto instance=Vst3Instance::create(id,rate,frames);if(!instance)return 0;slots_[i].instance=std::move(instance);return(static_cast<uint32_t>(slots_[i].generation)<<16)|(i+1);}return 0;}
 Vst3Instance* Adapter::instance(uint32_t handle)const{const uint32_t raw=handle&0xffffu;const uint16_t generation=static_cast<uint16_t>(handle>>16);if(!raw||raw>kSlots||!generation)return nullptr;const auto&slot=slots_[raw-1];return slot.generation==generation?slot.instance.get():nullptr;}
 void Adapter::destroy(uint32_t handle){const uint32_t raw=handle&0xffffu;auto*value=instance(handle);if(!value)return;auto&slot=slots_[raw-1];slot.instance.reset();if(++slot.generation==0)++slot.generation;}
