@@ -14,7 +14,8 @@ else()
     GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
     GIT_TAG ${PVST_VST3_SDK_REVISION}
     GIT_SHALLOW FALSE
-    GIT_SUBMODULES_RECURSE TRUE
+    GIT_SUBMODULES pluginterfaces
+    GIT_SUBMODULES_RECURSE FALSE
   )
   FetchContent_GetProperties(vst3sdk)
   if(NOT vst3sdk_POPULATED)

@@ -4,11 +4,12 @@ Copyright (c) 2026 Prometheos contributors.
 
 This repository is distributed under the MIT License; see `LICENSE`.
 
-This project fetches the Steinberg VST3 SDK under its MIT License at immutable
-revision `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96` (upstream
-`v3.8.1_build_84`). Copyright and license notices remain in the fetched
-upstream source tree.
+This project fetches the Steinberg VST3 SDK root at immutable revision
+`3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96` (upstream
+`v3.8.1_build_84`) and only its required `pluginterfaces` submodule at
+revision `4f547e8e102b47de4a8b8aaf343c73b700786372`. Both source trees are
+licensed under the MIT License by Steinberg Media Technologies GmbH, and
+their copyright and license notices remain in the fetched source trees.
 
-The VST3 SDK checkout also carries its pinned `base`, `cmake`, `doc`,
-`pluginterfaces`, `public.sdk`, `tutorials`, and `vstgui4` submodules. They are
-fetched only as upstream SDK material and retain their upstream notices.
+The bootstrap does not fetch the unrelated `base`, `cmake`, `doc`,
+`public.sdk`, `tutorials`, or `vstgui4` submodules.
