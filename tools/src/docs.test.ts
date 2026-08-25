@@ -40,14 +40,27 @@ describe("published SDK contract documentation", () => {
       sections.set(match[1], properties);
     }
     const expected = new Map<string, Set<string>>();
-    const collect = (value: unknown, label: string) => {
+    const collect = (value: unknown, label: string, result = expected) => {
       if (!value || typeof value !== "object") return;
       const object = value as Record<string, unknown>;
       const properties = object.properties;
-      if (object.type === "object" && properties && typeof properties === "object") {
+      if (properties && typeof properties === "object") {
         const names = new Set(Object.keys(properties as Record<string, unknown>));
-        expected.set(label, names);
-        for (const [property, child] of Object.entries(properties as Record<string, unknown>)) collect(child, `${label}.${property}`);
+        result.set(label, names);
+        for (const [property, child] of Object.entries(properties as Record<string, unknown>)) collect(child, `${label}.${property}`, result);
+      }
+      if (object.items) collect(object.items, `${label}[]`, result);
+      for (const key of ["contains", "additionalProperties", "unevaluatedItems", "unevaluatedProperties", "propertyNames", "not", "if", "then", "else"]) {
+        if (object[key]) collect(object[key], `${label}.${key}`, result);
+      }
+      for (const key of ["allOf", "anyOf", "oneOf", "prefixItems"]) {
+        if (Array.isArray(object[key])) for (const [index, child] of object[key].entries()) collect(child, `${label}.${key}[${index}]`, result);
+      }
+      for (const key of ["patternProperties", "dependentSchemas"]) {
+        const children = object[key];
+        if (children && typeof children === "object") {
+          for (const [name, child] of Object.entries(children as Record<string, unknown>)) collect(child, `${label}.${key}.${name}`, result);
+        }
       }
     };
     collect(schema, "root");
@@ -55,6 +68,15 @@ describe("published SDK contract documentation", () => {
     if (definitions && typeof definitions === "object") {
       for (const [name, definition] of Object.entries(definitions as Record<string, unknown>)) collect(definition, name);
     }
+    const arrayFixtureExpected = new Map<string, Set<string>>();
+    const arrayFixture = {
+      type: "object",
+      properties: { items: { type: "array", items: { type: "object", properties: { nested: { type: "string" } } } } },
+    };
+    collect(arrayFixture, "array-fixture", arrayFixtureExpected);
+    // The fixture is intentionally checked through the same traversal, but is
+    // not part of the published schema and therefore has no docs section.
+    expect(arrayFixtureExpected.get("array-fixture.items[]")).toEqual(new Set(["nested"]));
 
     expect(expected.size).toBeGreaterThan(0);
     for (const [label, properties] of expected) expect(sections.get(label), `missing schema object section ${label}`).toEqual(properties);
