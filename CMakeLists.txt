@@ -19,5 +19,21 @@ if(PVST_BUILD_TESTS)
   add_executable(abi_header_test tests/native/abi_header_test.cpp)
   target_compile_features(abi_header_test PRIVATE cxx_std_17)
   target_link_libraries(abi_header_test PRIVATE prometheos_webvst_adapter)
-  add_test(NAME abi_header COMMAND abi_header_test)
+  set(_pvst_abi_header_ctest_template [=[
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/Debug/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@")
+  add_test(abi_header
+    "${CMAKE_CURRENT_LIST_DIR}/Debug/abi_header_test@CMAKE_EXECUTABLE_SUFFIX@")
+else()
+  add_test(abi_header "@CMAKE_COMMAND@" -E false)
+endif()
+]=]
+  )
+  string(CONFIGURE "${_pvst_abi_header_ctest_template}"
+    _pvst_abi_header_ctest_content @ONLY)
+  file(GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/abi_header_test_ctest.cmake"
+    CONTENT "${_pvst_abi_header_ctest_content}"
+  )
+  set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/abi_header_test_ctest.cmake")
 endif()
