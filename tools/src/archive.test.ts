@@ -139,6 +139,7 @@ function crc32(data: Uint8Array): number {
 
 type StoredEntry = {
   name: string;
+  localName?: string;
   data?: Uint8Array;
   compressedSize?: number;
   uncompressedSize?: number;
@@ -152,6 +153,7 @@ function storedZip(entries: StoredEntry[]): Uint8Array {
   for (const entry of entries) {
     const data = Buffer.from(entry.data ?? new Uint8Array());
     const entryName = Buffer.from(entry.name, "utf8");
+    const localEntryName = Buffer.from(entry.localName ?? entry.name, "utf8");
     const compressedSize = entry.compressedSize ?? data.length;
     const uncompressedSize = entry.uncompressedSize ?? data.length;
     const crc = crc32(data);
@@ -162,7 +164,7 @@ function storedZip(entries: StoredEntry[]): Uint8Array {
     local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(compressedSize, 18);
     local.writeUInt32LE(uncompressedSize, 22);
-    local.writeUInt16LE(entryName.length, 26);
+    local.writeUInt16LE(localEntryName.length, 26);
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x0201_4b50, 0);
     central.writeUInt16LE(3 << 8, 4);
@@ -174,9 +176,9 @@ function storedZip(entries: StoredEntry[]): Uint8Array {
     central.writeUInt16LE(entryName.length, 28);
     central.writeUInt32LE(((entry.unixMode ?? 0o100644) << 16) >>> 0, 38);
     central.writeUInt32LE(offset, 42);
-    localParts.push(local, entryName, data);
+    localParts.push(local, localEntryName, data);
     centralParts.push(central, entryName);
-    offset += local.length + entryName.length + data.length;
+    offset += local.length + localEntryName.length + data.length;
   }
   const central = Buffer.concat(centralParts);
   const end = Buffer.alloc(22);
@@ -252,18 +254,70 @@ describe("packWebVst", () => {
 
     await expect(packWebVst(root)).rejects.toThrow(/hash mismatch.*resources\/data\.bin/i);
   });
+
+  it("rejects executable JavaScript sidecars under approved roots", async () => {
+    const root = await staging();
+    await writeFile(join(root, "resources/payload.js"), "console.log('sidecar')");
+
+    await expect(packWebVst(root)).rejects.toThrow(/executable.*javascript|javascript.*sidecar/i);
+  });
+
+  it("rejects staging content over the total expanded-byte limit before packing", async () => {
+    const root = await staging();
+    const previousLimit = ARCHIVE_LIMITS.maxExpandedBytes;
+    (ARCHIVE_LIMITS as { maxExpandedBytes: number }).maxExpandedBytes = 8;
+    try {
+      await writeFile(join(root, "resources/a.bin"), "1234");
+      await writeFile(join(root, "resources/b.bin"), "5678");
+      await expect(packWebVst(root)).rejects.toThrow(/total expanded.*1 GiB/i);
+    } finally {
+      (ARCHIVE_LIMITS as { maxExpandedBytes: number }).maxExpandedBytes = previousLimit;
+    }
+  });
+
+  it("rejects a manifest class vendor mismatch", async () => {
+    const root = await staging();
+    const module = probeableWasm();
+    const value = manifest(module);
+    value.classes[0].vendor = "Wrong vendor";
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+
+    await expect(packWebVst(root)).rejects.toThrow(/class.*mismatch|vendor/i);
+  });
+
+  it.each([
+    ["resource", "licenses/data.bin", "resource"],
+    ["preset", "resources/data.bin", "preset"],
+  ] as const)("enforces the %s artifact root layout", async (_label, artifactPath, role) => {
+    const root = await staging();
+    const module = probeableWasm();
+    const content = encoder.encode("artifact");
+    await mkdir(join(root, artifactPath, ".."), { recursive: true });
+    await writeFile(join(root, artifactPath), content);
+    const value = manifest(module, {
+      artifacts: [{ id: "bad-layout", path: artifactPath, sha256: sha256(content), role }],
+    });
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+
+    await expect(packWebVst(root)).rejects.toThrow(/artifact.*root|artifact.*path|layout/i);
+  });
 });
 
 describe("archive validation", () => {
-  it.each(["../plugin.json", "resources\\data.bin", "/plugin.json", "C:/plugin.json"])(
+  it.each(["../plugin.json", "resources\\data.bin", "/plugin.json", "C:/plugin.json", "C:plugin.json"])(
     "rejects unsafe entry path %s",
     async (entryName) => {
-      await expect(verifyWebVst(storedZip([{ name: entryName }]))).rejects.toThrow(/unsafe.*path/i);
+      const entries = entryName === "C:plugin.json" ? [{ name: "plugin.json" }, { name: entryName }] : [{ name: entryName }];
+      await expect(verifyWebVst(storedZip(entries))).rejects.toThrow(/unsafe.*path/i);
     },
   );
 
   it("rejects duplicate entry names", async () => {
     await expect(verifyWebVst(storedZip([{ name: "plugin.json" }, { name: "plugin.json" }]))).rejects.toThrow(/duplicate.*plugin\.json/i);
+  });
+
+  it("rejects a local-header name that differs from the central-directory name", async () => {
+    await expect(verifyWebVst(storedZip([{ name: "plugin.json", localName: "../plugin.json" }]))).rejects.toThrow(/unsafe.*path/i);
   });
 
   it("rejects symlink entries", async () => {
@@ -308,5 +362,14 @@ describe("inspectWebVst", () => {
       classes: [{ classUid, name: "", kind: "instrument", parameterCount: 1 }],
       artifacts: [{ id: "fixture-resource", path: "resources/data.bin", sha256: sha256(encoder.encode("resource")) }],
     });
+  });
+
+  it("rejects an ABI-derived parameter descriptor mismatch", async () => {
+    const root = await staging();
+    const module = probeableWasm();
+    const value = manifest(module);
+    value.classes[0].exposedParameters[0].buzz.maxValue = 1;
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+    await expect(packWebVst(root)).rejects.toThrow(/parameter.*mismatch|descriptor/i);
   });
 });

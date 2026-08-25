@@ -4,7 +4,7 @@ import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { validateManifest } from "./manifest.js";
 import { probeWasm, PVST_PARAMETER_AUTOMATABLE, PVST_PARAMETER_READ_ONLY } from "./probe.js";
-import { WEBVST_ABI, type WebVstManifestV1 } from "./types.js";
+import { WEBVST_ABI, type BuzzParameter, type ProbedParameter, type WebVstManifestV1 } from "./types.js";
 
 export const ARCHIVE_LIMITS = {
   maxEntries: 4_096,
@@ -44,7 +44,7 @@ function sha256(data: Uint8Array): string {
 }
 
 function safePath(name: string): void {
-  if (!name || name.includes("\\") || name.startsWith("/") || /^[A-Za-z]:[\\/]/.test(name)) {
+  if (!name || name.includes("\\") || name.startsWith("/") || /^[A-Za-z]:/.test(name)) {
     fail(`unsafe entry path ${name}`);
   }
   const parts = name.split("/");
@@ -137,6 +137,10 @@ function parseArchive(bytes: Uint8Array): ArchiveEntry[] {
     if (localOffset > view.length - 30 || view.readUInt32LE(localOffset) !== 0x0403_4b50) fail(`invalid local entry ${name}`);
     const localNameLength = view.readUInt16LE(localOffset + 26);
     const localExtraLength = view.readUInt16LE(localOffset + 28);
+    if (localOffset + 30 + localNameLength + localExtraLength > view.length) fail(`truncated local entry ${name}`);
+    const localName = decodeName(view.subarray(localOffset + 30, localOffset + 30 + localNameLength));
+    safePath(localName);
+    if (localName !== name) fail(`local-header path mismatch for ${name}`);
     const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
     if (dataOffset > view.length || compressedSize > view.length - dataOffset) fail(`truncated entry ${name}`);
     const compressed = view.subarray(dataOffset, dataOffset + compressedSize);
@@ -166,6 +170,14 @@ function expectedPath(name: string, manifest: WebVstManifestV1): boolean {
   return ["resources/", "presets/", "licenses/"].some((prefix) => name.startsWith(prefix));
 }
 
+function executableJavaScript(name: string): boolean {
+  return /\.(?:js|mjs|cjs)$/i.test(name);
+}
+
+function artifactRootAllowed(role: "preset" | "resource", path: string): boolean {
+  return path.startsWith(`${role === "resource" ? "resources" : "presets"}/`);
+}
+
 function parseManifest(entries: ArchiveEntry[]): { manifest: WebVstManifestV1; byName: Map<string, Uint8Array> } {
   const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
   const manifestBytes = byName.get("plugin.json");
@@ -174,11 +186,48 @@ function parseManifest(entries: ArchiveEntry[]): { manifest: WebVstManifestV1; b
   try { parsed = JSON.parse(textDecoder.decode(manifestBytes)); } catch { fail("plugin.json is not valid UTF-8 JSON"); }
   const manifest = validateManifest(parsed);
   manifestPath(manifest, manifest.module.path, "module path");
-  for (const artifact of manifest.artifacts ?? []) manifestPath(manifest, artifact.path, `artifact ${artifact.id} path`);
+  for (const artifact of manifest.artifacts ?? []) {
+    manifestPath(manifest, artifact.path, `artifact ${artifact.id} path`);
+    if (!artifactRootAllowed(artifact.role, artifact.path)) fail(`artifact ${artifact.id} path is outside its ${artifact.role} root`);
+  }
   if (!byName.has(manifest.module.path)) fail(`module is missing: ${manifest.module.path}`);
   for (const artifact of manifest.artifacts ?? []) if (!byName.has(artifact.path)) fail(`artifact is missing: ${artifact.path}`);
-  for (const name of byName.keys()) if (!expectedPath(name, manifest)) fail(`unexpected entry ${name}`);
+  for (const name of byName.keys()) {
+    if (executableJavaScript(name)) fail(`executable JavaScript sidecar is not allowed: ${name}`);
+    if (!expectedPath(name, manifest)) fail(`unexpected entry ${name}`);
+  }
   return { manifest, byName };
+}
+
+function expectedBuzzParameter(parameter: ProbedParameter): BuzzParameter {
+  const discrete = parameter.stepCount > 0;
+  const maxValue = discrete ? parameter.stepCount : 65_534;
+  const type = discrete && parameter.stepCount <= 254 ? "byte" : "word";
+  const noValue = type === "byte" ? 255 : 65_535;
+  const defValue = Math.round(Math.min(1, Math.max(0, parameter.defaultValue)) * maxValue);
+  return {
+    type,
+    name: parameter.title,
+    description: parameter.title,
+    minValue: 0,
+    maxValue,
+    noValue,
+    defValue,
+    flags: 1,
+    ...(discrete ? { display: { choices: parameter.displayValues } } : {}),
+  };
+}
+
+function verifyParameterDescriptor(classUid: string, parameter: ProbedParameter, buzz: BuzzParameter): void {
+  const expected = expectedBuzzParameter(parameter);
+  if (buzz.type !== expected.type || buzz.name !== expected.name || buzz.description !== expected.description ||
+      buzz.minValue !== expected.minValue || buzz.maxValue !== expected.maxValue || buzz.noValue !== expected.noValue ||
+      buzz.defValue !== expected.defValue || buzz.flags !== expected.flags) {
+    fail(`parameter mismatch for ${classUid}:${parameter.parameterId}`);
+  }
+  if (expected.display?.choices && JSON.stringify(buzz.display?.choices) !== JSON.stringify(expected.display.choices)) {
+    fail(`parameter display choices mismatch for ${classUid}:${parameter.parameterId}`);
+  }
 }
 
 async function verifyEntries(entries: ArchiveEntry[]): Promise<{ manifest: WebVstManifestV1; byName: Map<string, Uint8Array> }> {
@@ -195,10 +244,12 @@ async function verifyEntries(entries: ArchiveEntry[]): Promise<{ manifest: WebVs
   for (let classIndex = 0; classIndex < manifest.classes.length; classIndex += 1) {
     const expected = manifest.classes[classIndex];
     const actual = probed[classIndex];
-    if (expected.classUid !== actual.classUid || expected.name !== actual.name || expected.kind !== actual.kind) fail(`class mismatch for ${expected.classUid}`);
+    if (expected.classUid !== actual.classUid || expected.name !== actual.name || expected.vendor !== actual.vendor || expected.kind !== actual.kind) fail(`class mismatch for ${expected.classUid}`);
     const parameterIds = new Set(actual.parameters.map((parameter) => parameter.parameterId));
     for (const parameter of expected.exposedParameters) {
-      if (!parameterIds.has(parameter.parameterId)) fail(`parameter mismatch for ${expected.classUid}:${parameter.parameterId}`);
+      const actualParameter = actual.parameters.find((candidate) => candidate.parameterId === parameter.parameterId);
+      if (!actualParameter) fail(`parameter mismatch for ${expected.classUid}:${parameter.parameterId}`);
+      verifyParameterDescriptor(expected.classUid, actualParameter, parameter.buzz);
     }
     if (new Set(expected.exposedParameters.map((parameter) => parameter.parameterId)).size !== expected.exposedParameters.length) fail(`duplicate exposed parameter for ${expected.classUid}`);
     for (const parameter of actual.parameters) {
@@ -235,7 +286,7 @@ function zipArchive(files: Map<string, Uint8Array>): Uint8Array {
   return archive;
 }
 
-async function collectFiles(root: string, current: string, result: Map<string, Uint8Array>): Promise<void> {
+async function collectFiles(root: string, current: string, result: Map<string, Uint8Array>, totals: { expanded: number }): Promise<void> {
   const entries = await readdir(current, { withFileTypes: true });
   for (const entry of entries) {
     const absolute = join(current, entry.name);
@@ -243,9 +294,12 @@ async function collectFiles(root: string, current: string, result: Map<string, U
     safePath(relativeName);
     const info = await lstat(absolute);
     if (info.isSymbolicLink()) fail(`symlink entry ${relativeName} is not allowed`);
-    if (info.isDirectory()) await collectFiles(root, absolute, result);
+    if (info.isDirectory()) await collectFiles(root, absolute, result, totals);
     else if (info.isFile()) {
       if (result.size >= ARCHIVE_LIMITS.maxEntries) fail(`entry count exceeds ${ARCHIVE_LIMITS.maxEntries.toLocaleString("en-US")}`);
+      if (info.size > ARCHIVE_LIMITS.maxExpandedEntryBytes) fail("expanded entry exceeds 512 MiB");
+      if (info.size > ARCHIVE_LIMITS.maxExpandedBytes - totals.expanded) fail("total expanded content exceeds 1 GiB");
+      totals.expanded += info.size;
       const data = new Uint8Array(await readFile(absolute));
       if (data.byteLength > ARCHIVE_LIMITS.maxExpandedEntryBytes) fail("expanded entry exceeds 512 MiB");
       result.set(relativeName, data);
@@ -256,7 +310,7 @@ async function collectFiles(root: string, current: string, result: Map<string, U
 export async function packWebVst(stagingDirectory: string): Promise<Uint8Array> {
   const root = resolve(stagingDirectory);
   const files = new Map<string, Uint8Array>();
-  await collectFiles(root, root, files);
+  await collectFiles(root, root, files, { expanded: 0 });
   if (files.size > ARCHIVE_LIMITS.maxEntries) fail(`entry count exceeds ${ARCHIVE_LIMITS.maxEntries.toLocaleString("en-US")}`);
   const entries = [...files].map(([name, data]) => ({ name, data, compressedSize: data.byteLength, expandedSize: data.byteLength, method: 0, unixMode: 0 }));
   await verifyEntries(entries);
