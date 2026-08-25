@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(prometheos_vst3_wasm_sdk LANGUAGES C CXX)
 
 option(PVST_BUILD_TESTS "Build native ABI tests" OFF)
+option(PVST_BUILD_FIXTURES "Build the Emscripten WebVST conformance fixture package" OFF)
 option(PVST_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 set(PROMETHEOS_VST3_SDK_DIR "" CACHE PATH
   "Path to the exact VST3 SDK source directory")
@@ -21,6 +22,11 @@ target_include_directories(prometheos_webvst_adapter
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   PRIVATE ${PVST_VST3_SDK_DIR}
 )
+if(EMSCRIPTEN)
+  # The VST3 SDK has no Emscripten platform branch; its Linux ABI branch is
+  # the portable non-COM interface layout used by this standalone WASM build.
+  target_compile_definitions(prometheos_webvst_adapter PRIVATE __linux__=1)
+endif()
 function(pvst_enable_sanitizers target visibility)
   if(NOT PVST_ENABLE_SANITIZERS)
     return()
@@ -35,9 +41,12 @@ function(pvst_enable_sanitizers target visibility)
 endfunction()
 pvst_enable_sanitizers(prometheos_webvst_adapter PUBLIC)
 
+if(PVST_BUILD_TESTS OR PVST_BUILD_FIXTURES)
+  add_subdirectory(fixtures)
+endif()
+
 if(PVST_BUILD_TESTS)
   enable_testing()
-  add_subdirectory(fixtures)
   add_executable(abi_header_test tests/native/abi_header_test.cpp)
   target_compile_features(abi_header_test PRIVATE cxx_std_17)
   target_link_libraries(abi_header_test PRIVATE prometheos_webvst_adapter)
@@ -98,6 +107,7 @@ endforeach()
 if(NOT _pvst_abi_header_test_found)
   add_test(abi_header "@CMAKE_COMMAND@" -E false)
 endif()
+
 ]=]
   )
   string(CONFIGURE "${_pvst_abi_header_ctest_template}"
@@ -129,4 +139,45 @@ endforeach()
   )
   set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/webvst_adapter_ctest.cmake")
+endif()
+
+if(PVST_BUILD_FIXTURES)
+  if(NOT EMSCRIPTEN)
+    message(FATAL_ERROR "PVST_BUILD_FIXTURES requires the Emscripten toolchain")
+  endif()
+  find_program(PVST_PNPM_EXECUTABLE pnpm REQUIRED)
+
+  add_executable(webvst_fixture fixtures/bundle/wasm_entry.cpp)
+  target_link_libraries(webvst_fixture PRIVATE
+    prometheos_webvst_adapter
+    actual_vst3_fixture_factory
+  )
+  prometheos_configure_webvst(webvst_fixture)
+
+  set(PVST_FIXTURE_STAGING_DIR "${CMAKE_CURRENT_BINARY_DIR}/packages/fixture-staging")
+  set(PVST_FIXTURE_PACKAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/packages")
+  set(PVST_FIXTURE_PACKAGE "${PVST_FIXTURE_PACKAGE_DIR}/prometheos-fixtures.webvst")
+  set_target_properties(webvst_fixture PROPERTIES
+    SUFFIX ".wasm"
+    RUNTIME_OUTPUT_DIRECTORY "${PVST_FIXTURE_STAGING_DIR}"
+    OUTPUT_NAME "plugin"
+  )
+
+  add_custom_target(webvst_fixture_package ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PVST_FIXTURE_STAGING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PVST_FIXTURE_PACKAGE_DIR}"
+    COMMAND ${PVST_PNPM_EXECUTABLE} --dir "${CMAKE_CURRENT_SOURCE_DIR}/tools" run webvst -- manifest
+      "$<TARGET_FILE:webvst_fixture>" com.prometheos.fixtures 1.0.0 plugin.wasm
+      "${PVST_FIXTURE_STAGING_DIR}/plugin.json"
+    COMMAND ${PVST_PNPM_EXECUTABLE} --dir "${CMAKE_CURRENT_SOURCE_DIR}/tools" run webvst -- pack
+      "${PVST_FIXTURE_STAGING_DIR}" "${PVST_FIXTURE_PACKAGE}"
+    BYPRODUCTS "${PVST_FIXTURE_PACKAGE}"
+    DEPENDS webvst_fixture
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/package.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/src/archive.ts"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/src/cli.ts"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/src/manifest.ts"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/src/probe.ts"
+    VERBATIM
+  )
 endif()

@@ -7,6 +7,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:conformance": "vitest run ../tests/conformance",
     "typecheck": "tsc --noEmit",
     "build": "tsc --outDir dist --noEmit false",
     "webvst": "pnpm run build && node dist/cli.js"

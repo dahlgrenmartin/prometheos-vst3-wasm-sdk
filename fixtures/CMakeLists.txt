@@ -10,4 +10,7 @@ target_include_directories(actual_vst3_fixture_factory PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${PVST_VST3_SDK_DIR}
 )
+if(EMSCRIPTEN)
+  target_compile_definitions(actual_vst3_fixture_factory PRIVATE __linux__=1)
+endif()
 pvst_enable_sanitizers(actual_vst3_fixture_factory PRIVATE)

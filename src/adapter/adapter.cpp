@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <pluginterfaces/base/ipluginbase.h>
 extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory ();
@@ -10,8 +9,8 @@ namespace pvst {
 using namespace Steinberg; using namespace Steinberg::Vst;
 namespace {
 bool audio_class (IPluginFactory* factory, int32 raw, PClassInfo& info) { return factory && factory->getClassInfo (raw, &info) == kResultOk && std::strcmp (info.category, kVstAudioEffectClass) == 0; }
-uint32_t write_text (const char* text, char* dst, uint32_t capacity) { const auto size = static_cast<uint32_t> (std::strlen (text) + 1); if (!dst || capacity < size) return 0; std::memcpy (dst, text, size); return size; }
-uint32_t size_text (const char* text) { return text ? static_cast<uint32_t> (std::strlen (text) + 1) : 0; }
+uint32_t write_text (const char* text, char* dst, uint32_t capacity) { const auto size = static_cast<uint32_t> (std::strlen (text)); if (!dst || capacity < size) return 0; std::memcpy (dst, text, size); return size; }
+uint32_t size_text (const char* text) { return text ? static_cast<uint32_t> (std::strlen (text)) : 0; }
 
 struct Utf8Text {
   std::array<char, 513> bytes {};
@@ -23,7 +22,6 @@ bool utf16_to_utf8 (const TChar* source, uint32_t capacity, Utf8Text& result) {
   for (uint32_t index = 0; index < capacity; ++index) {
     uint32_t codepoint = static_cast<uint16_t> (source[index]);
     if (codepoint == 0) {
-      result.bytes[result.size++] = 0;
       return true;
     }
     if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
@@ -62,8 +60,8 @@ bool utf16_to_utf8 (const TChar* source, uint32_t capacity, Utf8Text& result) {
 Adapter& adapter () { static Adapter value; return value; }
 uint32_t Adapter::class_count () const { auto* factory = GetPluginFactory (); if (!factory) return 0; uint32_t count = 0; for (int32 raw = 0; raw < factory->countClasses (); ++raw) { PClassInfo info {}; if (audio_class (factory, raw, info)) ++count; } factory->release (); return count; }
 bool Adapter::class_id (uint32_t visible, TUID id) const { auto* factory = GetPluginFactory (); if (!factory) return false; uint32_t seen = 0; bool found = false; for (int32 raw = 0; raw < factory->countClasses (); ++raw) { PClassInfo info {}; if (audio_class (factory, raw, info) && seen++ == visible) { std::memcpy (id, info.cid, 16); found = true; break; } } factory->release (); return found; }
-uint32_t Adapter::class_uid_size (uint32_t index) const { TUID id {}; return class_id (index, id) ? 33u : 0u; }
-int32_t Adapter::class_uid_write (uint32_t index, char* dst, uint32_t cap) const { TUID id {}; if (!class_id (index, id)) return PVST_ERROR_ARGUMENT; if (!dst || cap < 33) return PVST_ERROR_BUFFER_TOO_SMALL; for (uint32_t i = 0; i < 16; ++i) std::snprintf (dst + i * 2, 3, "%02x", static_cast<unsigned char> (id[i])); dst[32] = 0; return PVST_OK; }
+uint32_t Adapter::class_uid_size (uint32_t index) const { TUID id {}; return class_id (index, id) ? 32u : 0u; }
+int32_t Adapter::class_uid_write (uint32_t index, char* dst, uint32_t cap) const { TUID id {}; if (!class_id (index, id)) return PVST_ERROR_ARGUMENT; if (!dst || cap < 32) return PVST_ERROR_BUFFER_TOO_SMALL; constexpr char hex[] = "0123456789abcdef"; for (uint32_t i = 0; i < 16; ++i) { const auto byte = static_cast<unsigned char> (id[i]); dst[i * 2] = hex[byte >> 4u]; dst[i * 2 + 1] = hex[byte & 0x0fu]; } return PVST_OK; }
 uint32_t Adapter::class_name_size (uint32_t index) const { auto* f = GetPluginFactory (); if (!f) return 0; uint32_t seen=0, result=0; for (int32 i=0;i<f->countClasses ();++i) { PClassInfo info {}; if (audio_class(f,i,info) && seen++ == index) { result=size_text(info.name); break; } } f->release (); return result; }
 int32_t Adapter::class_name_write (uint32_t index, char* dst, uint32_t cap) const { auto* f = GetPluginFactory (); if (!f) return PVST_ERROR_ARGUMENT; uint32_t seen=0; int32_t result=PVST_ERROR_ARGUMENT; for (int32 i=0;i<f->countClasses ();++i) { PClassInfo info {}; if (audio_class(f,i,info) && seen++ == index) { result=write_text(info.name,dst,cap) ? PVST_OK : PVST_ERROR_BUFFER_TOO_SMALL; break; } } f->release (); return result; }
 uint32_t Adapter::class_vendor_size (uint32_t index) const { TUID id {}; if (!class_id(index, id)) return 0; auto* f=GetPluginFactory (); PFactoryInfo info {}; const auto result=f && f->getFactoryInfo(&info)==kResultOk ? size_text(info.vendor) : 0; if(f)f->release(); return result; }

@@ -1,13 +1,21 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from "node:fs/promises";
 import { inspectWebVst, packWebVst, verifyWebVst } from "./archive.js";
+import { generateManifest } from "./manifest.js";
 
 function usage(): never {
-  throw new Error("usage: webvst pack <staging-directory> <output.webvst> | webvst inspect <archive.webvst> | webvst verify <archive.webvst>");
+  throw new Error("usage: webvst manifest <plugin.wasm> <package-id> <version> <module-path> <plugin.json> | webvst pack <staging-directory> <output.webvst> | webvst inspect <archive.webvst> | webvst verify <archive.webvst>");
 }
 
 async function main(argv: string[]): Promise<void> {
-  const [command, first, second] = argv;
+  const [command, first, second, third, fourth, fifth] = argv;
+  if (command === "manifest" && first && second && third && fourth && fifth) {
+    const manifest = await generateManifest({
+      wasm: new Uint8Array(await readFile(first)), packageId: second, version: third, modulePath: fourth,
+    });
+    await writeFile(fifth, `${JSON.stringify(manifest)}\n`);
+    return;
+  }
   if (command === "pack" && first && second) {
     await writeFile(second, await packWebVst(first));
     return;
@@ -22,7 +30,10 @@ async function main(argv: string[]): Promise<void> {
   usage();
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
+const argumentsAfterScriptDelimiter = process.argv.slice(2);
+if (argumentsAfterScriptDelimiter[0] === "--") argumentsAfterScriptDelimiter.shift();
+
+main(argumentsAfterScriptDelimiter).catch((error: unknown) => {
   process.stderr.write(`webvst: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
 });

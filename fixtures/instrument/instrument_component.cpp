@@ -38,7 +38,7 @@ uint32 PLUGIN_API InstrumentComponent::addRef () { return ++refs_; }
 uint32 PLUGIN_API InstrumentComponent::release () { const auto refs = --refs_; if (!refs) delete this; return refs; }
 tresult PLUGIN_API InstrumentComponent::initialize (FUnknown*) { return kResultOk; }
 tresult PLUGIN_API InstrumentComponent::terminate () { return kResultOk; }
-tresult PLUGIN_API InstrumentComponent::getControllerClassId (TUID id) { std::memcpy (id, kInstrumentControllerCid, sizeof TUID); return kResultOk; }
+tresult PLUGIN_API InstrumentComponent::getControllerClassId (TUID id) { std::memcpy (id, kInstrumentControllerCid, sizeof (TUID)); return kResultOk; }
 tresult PLUGIN_API InstrumentComponent::setIoMode (IoMode) { return kResultOk; }
 int32 PLUGIN_API InstrumentComponent::getBusCount (MediaType type, BusDirection direction) { return type == kAudio ? direction == kOutput ? 1 : 0 : type == kEvent && direction == kInput ? 1 : 0; }
 tresult PLUGIN_API InstrumentComponent::getBusInfo (MediaType type, BusDirection direction, int32 index, BusInfo& info) {

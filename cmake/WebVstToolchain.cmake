@@ -11,11 +11,11 @@ function(prometheos_configure_webvst target)
     message(FATAL_ERROR "prometheos_configure_webvst requires the Emscripten toolchain")
   endif()
 
-  if(NOT DEFINED PROMETHEOS_VST3_SDK_DIR OR
-     NOT IS_DIRECTORY "${PROMETHEOS_VST3_SDK_DIR}" OR
-     NOT EXISTS "${PROMETHEOS_VST3_SDK_DIR}/pluginterfaces/vst/ivstaudioprocessor.h")
+  if(NOT DEFINED PVST_VST3_SDK_DIR OR
+     NOT IS_DIRECTORY "${PVST_VST3_SDK_DIR}" OR
+     NOT EXISTS "${PVST_VST3_SDK_DIR}/pluginterfaces/vst/ivstaudioprocessor.h")
     message(FATAL_ERROR
-      "PROMETHEOS_VST3_SDK_DIR must name the exact VST3 SDK source directory")
+      "PVST_VST3_SDK_DIR must name the resolved exact VST3 SDK source directory")
   endif()
 
   get_target_property(_prometheos_webvst_wasmfs ${target} PROMETHEOS_WEBVST_WASMFS)

@@ -18,8 +18,8 @@ void require_at (bool condition, int line) {
 
 std::array<char, 33> class_uid (uint32_t class_index) {
   std::array<char, 33> result {};
-  require (pvst_class_uid_size (class_index) == result.size ());
-  require (pvst_class_uid_write (class_index, result.data (), result.size ()) == PVST_OK);
+  require (pvst_class_uid_size (class_index) == result.size () - 1);
+  require (pvst_class_uid_write (class_index, result.data (), result.size () - 1) == PVST_OK);
   return result;
 }
 
