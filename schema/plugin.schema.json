@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prometheos.dev/schema/webvst/plugin-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "packageId", "version", "abi", "module", "classes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "packageId": { "type": "string", "pattern": "^(?:[a-z](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$" },
+    "version": { "type": "string", "minLength": 1 },
+    "abi": { "const": "prometheos-vst3-wasm-1" },
+    "module": { "$ref": "#/$defs/module" },
+    "classes": { "type": "array", "items": { "$ref": "#/$defs/class" } },
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "module": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "$ref": "#/$defs/sha256" } }
+    },
+    "class": {
+      "type": "object", "additionalProperties": false,
+      "required": ["classUid", "name", "vendor", "kind", "exposedParameters"],
+      "properties": {
+        "classUid": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "name": { "type": "string" }, "vendor": { "type": "string" },
+        "kind": { "enum": ["instrument", "effect"] },
+        "exposedParameters": { "type": "array", "items": { "$ref": "#/$defs/exposedParameter" } },
+        "programs": { "$ref": "#/$defs/programs" }
+      }
+    },
+    "exposedParameter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["parameterId", "buzz"],
+      "properties": { "parameterId": { "type": "integer", "minimum": 0, "maximum": 4294967295 }, "buzz": { "$ref": "#/$defs/buzzParameter" } }
+    },
+    "buzzParameter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "name", "description", "minValue", "maxValue", "noValue", "defValue", "flags"],
+      "properties": {
+        "type": { "enum": ["note", "switch", "byte", "word"] }, "name": { "type": "string" }, "description": { "type": "string" },
+        "minValue": { "type": "number" }, "maxValue": { "type": "number" }, "noValue": { "type": "number" }, "defValue": { "type": "number" }, "flags": { "type": "integer" },
+        "display": { "$ref": "#/$defs/display" }
+      }
+    },
+    "display": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "unit": { "enum": ["%", "Hz", "ms", "dB", "ticks"] }, "min": { "type": "number" }, "max": { "type": "number" },
+        "precision": { "type": "integer", "minimum": 0 }, "curve": { "enum": ["linear", "exp"] }, "choices": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "programs": {
+      "type": "object", "additionalProperties": false, "required": ["categories"],
+      "properties": { "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } } }
+    },
+    "category": {
+      "type": "object", "additionalProperties": false, "required": ["name", "entries"],
+      "properties": { "name": { "type": "string" }, "entries": { "type": "array", "items": { "$ref": "#/$defs/program" } } }
+    },
+    "program": {
+      "type": "object", "additionalProperties": false, "required": ["name", "artifactId", "offset", "size"],
+      "properties": { "name": { "type": "string" }, "artifactId": { "type": "string" }, "offset": { "type": "integer", "minimum": 0 }, "size": { "type": "integer", "minimum": 0 } }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false, "required": ["id", "path", "sha256", "role"],
+      "properties": { "id": { "type": "string" }, "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" }, "role": { "enum": ["preset", "resource"] } }
+    }
+  }
+}
