@@ -68,7 +68,11 @@ export interface AuthorParameterCuration {
   parameterId: number;
   expose?: boolean;
   /** Presentation-only tweaks applied after the ABI has supplied the base descriptor. */
-  buzz?: Partial<BuzzParameter>;
+  buzz?: {
+    name?: string;
+    description?: string;
+    display?: Omit<BuzzParameterDisplay, "choices">;
+  };
 }
 
 export interface ManifestAuthorConfig {

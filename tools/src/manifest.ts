@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import {
   PVST_PARAMETER_AUTOMATABLE,
   PVST_PARAMETER_READ_ONLY,
@@ -15,6 +16,49 @@ import {
 } from "./types.js";
 
 const PACKAGE_ID = /^(?:[a-z](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$/;
+const CLASS_UID = /^[a-f0-9]{32}$/;
+const SHA256 = /^[a-f0-9]{64}$/;
+const finiteNumber = z.number().finite();
+
+const presentationDisplaySchema = z.object({
+  unit: z.enum(["%", "Hz", "ms", "dB", "ticks"]).optional(),
+  min: finiteNumber.optional(),
+  max: finiteNumber.optional(),
+  precision: z.number().int().min(0).optional(),
+  curve: z.enum(["linear", "exp"]).optional(),
+}).strict();
+
+const curationSchema = z.object({
+  classUid: z.string().regex(CLASS_UID),
+  parameterId: z.number().int().min(0).max(0xffff_ffff),
+  expose: z.boolean().optional(),
+  buzz: z.object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    display: presentationDisplaySchema.optional(),
+  }).strict().optional(),
+}).strict();
+
+const displaySchema = presentationDisplaySchema.extend({ choices: z.array(z.string()).optional() }).strict();
+const buzzSchema = z.object({
+  type: z.enum(["note", "switch", "byte", "word"]),
+  name: z.string(), description: z.string(), minValue: finiteNumber, maxValue: finiteNumber,
+  noValue: finiteNumber, defValue: finiteNumber, flags: z.number().int(), display: displaySchema.optional(),
+}).strict();
+const parameterSchema = z.object({ parameterId: z.number().int().min(0).max(0xffff_ffff), buzz: buzzSchema }).strict();
+const programSchema = z.object({ name: z.string(), artifactId: z.string(), offset: z.number().int().min(0), size: z.number().int().min(0) }).strict();
+const categorySchema = z.object({ name: z.string(), entries: z.array(programSchema) }).strict();
+const programsSchema = z.object({ categories: z.array(categorySchema) }).strict();
+const classSchema = z.object({
+  classUid: z.string().regex(CLASS_UID), name: z.string(), vendor: z.string(), kind: z.enum(["instrument", "effect"]),
+  exposedParameters: z.array(parameterSchema), programs: programsSchema.optional(),
+}).strict();
+const manifestSchema = z.object({
+  schemaVersion: z.literal(1), packageId: z.string().regex(PACKAGE_ID), version: z.string().min(1), abi: z.literal(WEBVST_ABI),
+  module: z.object({ path: z.string().min(1), sha256: z.string().regex(SHA256) }).strict(),
+  classes: z.array(classSchema),
+  artifacts: z.array(z.object({ id: z.string(), path: z.string(), sha256: z.string().regex(SHA256), role: z.enum(["preset", "resource"]) }).strict()).optional(),
+}).strict();
 
 function fail(message: string): never {
   throw new Error(`WebVST manifest: ${message}`);
@@ -22,6 +66,18 @@ function fail(message: string): never {
 
 function assertPackageId(packageId: string): void {
   if (!PACKAGE_ID.test(packageId)) fail("packageId must be a reverse-DNS identifier");
+}
+
+function validCuration(value: unknown): AuthorParameterCuration[] {
+  const parsed = z.array(curationSchema).safeParse(value ?? []);
+  if (!parsed.success) fail(`invalid curation: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`);
+  return parsed.data as AuthorParameterCuration[];
+}
+
+export function validateManifest(value: unknown): WebVstManifestV1 {
+  const parsed = manifestSchema.safeParse(value);
+  if (!parsed.success) fail(`final manifest does not satisfy the strict schema: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`);
+  return parsed.data as WebVstManifestV1;
 }
 
 function clampUnit(value: number): number {
@@ -50,7 +106,7 @@ function mapParameter(parameter: ProbedParameter): BuzzParameter {
 function indexCuration(entries: readonly AuthorParameterCuration[] | undefined): Map<string, AuthorParameterCuration> {
   const result = new Map<string, AuthorParameterCuration>();
   for (const entry of entries ?? []) {
-    const key = `${entry.classUid}:${entry.parameterId >>> 0}`;
+    const key = `${entry.classUid}:${entry.parameterId}`;
     if (result.has(key)) fail(`duplicate curation entry for ${key}`);
     result.set(key, entry);
   }
@@ -65,7 +121,7 @@ function applyCuration(
   const entries = indexCuration(curation);
   for (const entry of entries.values()) {
     const probed = probedClasses.find((candidate) => candidate.classUid === entry.classUid);
-    if (!probed || !probed.parameters.some((parameter) => parameter.parameterId === (entry.parameterId >>> 0))) {
+    if (!probed || !probed.parameters.some((parameter) => parameter.parameterId === entry.parameterId)) {
       fail(`curation parameter ${entry.classUid}:${entry.parameterId} does not exist in the probed module`);
     }
   }
@@ -91,7 +147,15 @@ function applyCuration(
         exposed.set(parameter.parameterId, { parameterId: parameter.parameterId, buzz: mapParameter(parameter) });
       }
       const selected = exposed.get(parameter.parameterId)!;
-      if (entry.buzz) Object.assign(selected.buzz, entry.buzz);
+      if (entry.buzz?.name !== undefined) selected.buzz.name = entry.buzz.name;
+      if (entry.buzz?.description !== undefined) selected.buzz.description = entry.buzz.description;
+      if (entry.buzz?.display) {
+        selected.buzz.display = {
+          ...selected.buzz.display,
+          ...entry.buzz.display,
+          ...(selected.buzz.display?.choices ? { choices: selected.buzz.display.choices } : {}),
+        };
+      }
     }
     manifestClass.exposedParameters = [...exposed.values()].sort((left, right) => left.parameterId - right.parameterId);
   }
@@ -103,6 +167,7 @@ export async function generateManifest(config: ManifestAuthorConfig): Promise<We
   if (!config.modulePath || config.modulePath.includes("\\") || config.modulePath.startsWith("/") || config.modulePath.split("/").includes("..")) {
     fail("modulePath must be a safe relative POSIX path");
   }
+  const curation = validCuration(config.curation);
   const probedClasses = await probeWasm(config.wasm);
   const classes: WebVstManifestClass[] = probedClasses.map((probed) => ({
     classUid: probed.classUid,
@@ -113,13 +178,13 @@ export async function generateManifest(config: ManifestAuthorConfig): Promise<We
       .filter((parameter) => (parameter.flags & PVST_PARAMETER_AUTOMATABLE) !== 0 && (parameter.flags & PVST_PARAMETER_READ_ONLY) === 0)
       .map((parameter) => ({ parameterId: parameter.parameterId, buzz: mapParameter(parameter) })),
   }));
-  applyCuration(classes, probedClasses, config.curation);
-  return {
+  applyCuration(classes, probedClasses, curation);
+  return validateManifest({
     schemaVersion: 1,
     packageId: config.packageId,
     version: config.version,
     abi: WEBVST_ABI,
     module: { path: config.modulePath, sha256: createHash("sha256").update(config.wasm).digest("hex") },
     classes,
-  };
+  });
 }
