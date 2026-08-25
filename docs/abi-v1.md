@@ -102,7 +102,8 @@ are interleaved `[left0, right0, left1, right1, ...]`. The adapter configures
 the VST3 processor for realtime, stereo, 32-bit samples, and one main output
 bus. A wrapped effect may have one main stereo input; an instrument has no
 input bus. Output is copied only after successful processing. Pending events and
-parameter changes are then cleared.
+parameter changes are cleared after every process attempt, including a plugin
+failure; callers must requeue changes they want retried.
 
 `pvst_note_on` and `pvst_note_off` queue a VST3 event at sample offset zero on
 bus 0, channel 0, with note ID -1. Notes must be 0..127 and note-on velocity
@@ -111,11 +112,11 @@ holds 64 events and reports `PVST_ERROR_QUEUE_FULL` when full.
 
 `pvst_param_set` accepts a known controller parameter and a finite normalized
 value. Changes are grouped by parameter ID, applied to the controller, and
-queued at sample offset zero. The fixed queue permits at most 64 total points
-and 64 parameter IDs; a full queue is atomic and does not call the controller.
-`pvst_param_get` returns the controller's normalized value (or zero when no
-controller exists). Changes are delivered to the plugin on the next successful
-`pvst_process` call.
+queued at sample offset zero for the next process attempt. The fixed queue
+permits at most 64 total points and 64 parameter IDs; a full queue is atomic
+and does not call the controller. Pending changes are cleared after that
+attempt, even when processing returns a plugin error. `pvst_param_get` returns
+the controller's normalized value (or zero when no controller exists).
 
 ### State
 

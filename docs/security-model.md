@@ -16,12 +16,15 @@ artifacts to the package metadata.
 
 ## WebAssembly boundary
 
-The probe compiles the module, checks ABI version 1 and every required export,
-and rejects imports outside the fixed AudioWorklet-compatible allowlist. Its
-environment supplies deterministic clock, zero-filled randomness, bounded
-environment data, and no host object access. Consumers must instantiate each
-plugin in a fresh WebAssembly instance and memory, and must call `_initialize`
-before ABI calls. The ABI does not load native `.vst3` binaries.
+The probe compiles the module, checks ABI version 1, and resolves each export
+as it is needed while reading discovery metadata; a missing export fails at the
+corresponding probe operation. The runtime package consumer separately
+requires each instance-operation export when it is called. Imports outside the
+fixed AudioWorklet-compatible allowlist are rejected. The environment supplies
+deterministic clock, zero-filled randomness, bounded environment data, and no
+host object access. Consumers must instantiate each plugin in a fresh
+WebAssembly instance and memory, and must call `_initialize` before ABI calls.
+The ABI does not load native `.vst3` binaries.
 
 The allowlist is deliberately small: `env.__cxa_rethrow`,
 `env.emscripten_notify_memory_growth`, and the WASI preview-1 calls

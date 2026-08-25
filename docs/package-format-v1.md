@@ -43,6 +43,105 @@ under `resources/`, `presets/`, and `licenses/` so a package can carry those
 supporting files. All other entries must be declared by the manifest as the
 module or an artifact.
 
+## Schema property inventory
+
+The following sections mirror every object with a `properties` member in the
+published schema. Keeping the property names in these object-specific tables
+makes additions reviewable without relying on a prose occurrence elsewhere.
+
+### `root` object
+
+| Property | Meaning |
+| --- | --- |
+| `schemaVersion` | Schema version. |
+| `packageId` | Package identifier. |
+| `version` | Package version. |
+| `abi` | ABI identifier. |
+| `module` | Module descriptor. |
+| `classes` | Class descriptors. |
+| `artifacts` | Optional artifact descriptors. |
+
+### `module` object
+
+| Property | Meaning |
+| --- | --- |
+| `path` | Safe relative module path. |
+| `sha256` | Module digest. |
+
+### `class` object
+
+| Property | Meaning |
+| --- | --- |
+| `classUid` | Canonical class UID. |
+| `name` | Class name. |
+| `vendor` | Class vendor. |
+| `kind` | Instrument or effect. |
+| `exposedParameters` | Exposed parameter descriptors. |
+| `programs` | Optional program metadata. |
+
+### `exposedParameter` object
+
+| Property | Meaning |
+| --- | --- |
+| `parameterId` | Unsigned ABI parameter ID. |
+| `buzz` | Host-facing parameter descriptor. |
+
+### `buzzParameter` object
+
+| Property | Meaning |
+| --- | --- |
+| `type` | Host parameter type. |
+| `name` | Display name. |
+| `description` | Display description. |
+| `minValue` | Minimum host value. |
+| `maxValue` | Maximum host value. |
+| `noValue` | Host no-value sentinel. |
+| `defValue` | Host default value. |
+| `flags` | Host parameter flags. |
+| `display` | Optional presentation metadata. |
+
+### `display` object
+
+| Property | Meaning |
+| --- | --- |
+| `unit` | Display unit. |
+| `min` | Display minimum. |
+| `max` | Display maximum. |
+| `precision` | Display decimal precision. |
+| `curve` | Display curve. |
+| `choices` | Discrete display choices. |
+
+### `programs` object
+
+| Property | Meaning |
+| --- | --- |
+| `categories` | Program categories. |
+
+### `category` object
+
+| Property | Meaning |
+| --- | --- |
+| `name` | Category name. |
+| `entries` | Programs in this category. |
+
+### `program` object
+
+| Property | Meaning |
+| --- | --- |
+| `name` | Program name. |
+| `artifactId` | Referenced artifact ID. |
+| `offset` | Byte offset in the artifact. |
+| `size` | Program byte size. |
+
+### `artifact` object
+
+| Property | Meaning |
+| --- | --- |
+| `id` | Artifact identifier. |
+| `path` | Safe relative artifact path. |
+| `sha256` | Artifact digest. |
+| `role` | Preset or resource role. |
+
 The manifest generator probes ABI metadata rather than trusting author input.
 Automatable, non-read-only parameters are exposed by default. Continuous
 parameters map to word values 0..65534 (no-value 65535); discrete parameters
