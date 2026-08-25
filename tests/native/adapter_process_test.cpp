@@ -1,6 +1,9 @@
 #include "fake_factory.h"
 #include <array>
 #include <cassert>
+#include <cstdlib>
+#undef assert
+#define assert(condition) do { if (!(condition)) std::abort (); } while (false)
 int process_test () {
   std::array<float, 128> output {};
   const auto synth = pvst_create (0, 48000.0, 128); assert (synth != 0);

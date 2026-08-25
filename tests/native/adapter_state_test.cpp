@@ -2,6 +2,9 @@
 #include "fake_factory.h"
 #include <array>
 #include <cassert>
+#include <cstdlib>
+#undef assert
+#define assert(condition) do { if (!(condition)) std::abort (); } while (false)
 int process_test ();
 int lifecycle_test ();
 int main () {

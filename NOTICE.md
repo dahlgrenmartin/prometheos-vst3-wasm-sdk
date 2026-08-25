@@ -8,3 +8,7 @@ This project fetches the Steinberg VST3 SDK under its MIT License at immutable
 revision `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96` (upstream
 `v3.8.1_build_84`). Copyright and license notices remain in the fetched
 upstream source tree.
+
+The VST3 SDK checkout also carries its pinned `base`, `cmake`, `doc`,
+`pluginterfaces`, `public.sdk`, `tutorials`, and `vstgui4` submodules. They are
+fetched only as upstream SDK material and retain their upstream notices.

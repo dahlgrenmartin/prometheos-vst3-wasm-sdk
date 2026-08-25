@@ -88,6 +88,7 @@ public:
   tresult PLUGIN_API queryInterface (const TUID iid, void** out) override { if (!out) return kInvalidArgument; *out = same (iid, INLINE_UID_OF(IPluginFactory2)) ? static_cast<IPluginFactory2*> (this) : static_cast<IPluginFactory*> (this); if (!*out) return kNoInterface; addRef (); return kResultOk; }
   uint32 PLUGIN_API addRef () override { return ++refs_; }
   uint32 PLUGIN_API release () override { return --refs_; }
+  uint32 refs () const { return refs_; }
   tresult PLUGIN_API getFactoryInfo (PFactoryInfo* info) override { if (!info) return kInvalidArgument; *info = PFactoryInfo ("Fake", "", "", 0); return kResultOk; }
   int32 PLUGIN_API countClasses () override { return 2; }
   tresult PLUGIN_API getClassInfo (int32 index, PClassInfo* info) override { if (!info || index < 0 || index > 1) return kInvalidArgument; *info = PClassInfo (index ? kEffectCid : kSynthCid, PClassInfo::kManyInstances, kVstAudioEffectClass, index ? "Fake Effect" : "Fake Synth"); return kResultOk; }
@@ -99,5 +100,5 @@ inline Factory factory;
 } // namespace fake_vst3
 
 #ifdef PVST_DEFINE_FAKE_FACTORY
-extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory () { return &fake_vst3::factory; }
+extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory () { fake_vst3::factory.addRef (); return &fake_vst3::factory; }
 #endif
