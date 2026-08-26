@@ -146,7 +146,7 @@ function parseArchive(bytes: Uint8Array): ArchiveEntry[] {
     const compressed = view.subarray(dataOffset, dataOffset + compressedSize);
     let data: Uint8Array;
     try {
-      data = method === 0 ? new Uint8Array(compressed) : method === 8 ? new Uint8Array(inflateRawSync(compressed)) : fail(`unsupported compression method for ${name}`);
+      data = method === 0 ? new Uint8Array(compressed) : method === 8 ? new Uint8Array(inflateRawSync(compressed, { maxOutputLength: Math.max(1, expandedSize) })) : fail(`unsupported compression method for ${name}`);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("WebVST archive:")) throw error;
       fail(`cannot decompress entry ${name}`);
@@ -192,6 +192,19 @@ function parseManifest(entries: ArchiveEntry[]): { manifest: WebVstManifestV1; b
   }
   if (!byName.has(manifest.module.path)) fail(`module is missing: ${manifest.module.path}`);
   for (const artifact of manifest.artifacts ?? []) if (!byName.has(artifact.path)) fail(`artifact is missing: ${artifact.path}`);
+  const artifactsById = new Map((manifest.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
+  for (const manifestClass of manifest.classes) {
+    for (const category of manifestClass.programs?.categories ?? []) {
+      for (const program of category.entries) {
+        const artifact = artifactsById.get(program.artifactId);
+        if (!artifact) fail(`program artifact is missing: ${program.artifactId}`);
+        const artifactBytes = byName.get(artifact.path)!;
+        if (program.offset > artifactBytes.byteLength || program.size > artifactBytes.byteLength - program.offset) {
+          fail(`program range exceeds artifact ${program.artifactId}`);
+        }
+      }
+    }
+  }
   for (const name of byName.keys()) {
     if (executableJavaScript(name)) fail(`executable JavaScript sidecar is not allowed: ${name}`);
     if (!expectedPath(name, manifest)) fail(`unexpected entry ${name}`);

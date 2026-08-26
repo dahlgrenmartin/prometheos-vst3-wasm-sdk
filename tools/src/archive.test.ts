@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { deflateRawSync } from "node:zlib";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,7 +46,7 @@ const section = (id: number, content: number[]) => [id, ...u32leb(content.length
 const functionType = (parameters: number[], results: number[]) => [0x60, ...vector(parameters.map((item) => [item])), ...vector(results.map((item) => [item]))];
 const body = (instructions: number[]) => [...u32leb(instructions.length + 2), 0, ...instructions, 0x0b];
 
-function probeableWasm(): Uint8Array {
+function probeableWasm(includeInitializer = true): Uint8Array {
   const uid = ascii(classUid);
   const i32const = (value: number) => [0x41, ...s32leb(value)];
   const writeUid: number[] = [];
@@ -69,7 +70,8 @@ function probeableWasm(): Uint8Array {
     ["pvst_class_kind", 0, 12], ["pvst_class_param_count", 0, 13], ["pvst_class_param_id", 0, 14],
     ["pvst_class_param_flags", 0, 15], ["pvst_class_param_step_count", 0, 16], ["pvst_class_param_default", 0, 17],
     ["pvst_class_param_title_size", 0, 18],
-  ].map(([label, kind, index]) => [...name(label as string), kind as number, ...u32leb(index as number)]);
+  ].filter(([label]) => includeInitializer || label !== "_initialize")
+    .map(([label, kind, index]) => [...name(label as string), kind as number, ...u32leb(index as number)]);
   const exports = section(7, vector(exported));
   const code = section(10, vector([
     body([0x23, 0, ...i32const(1), 0x6a, 0x24, 0]), body(i32const(512)), body([]), body(i32const(1)),
@@ -190,6 +192,40 @@ function storedZip(entries: StoredEntry[]): Uint8Array {
   return new Uint8Array(Buffer.concat([...localParts, central, end]));
 }
 
+function deflatedZip(name: string, data: Uint8Array, declaredSize: number): Uint8Array {
+  const compressed = deflateRawSync(data);
+  const entryName = Buffer.from(name, "utf8");
+  const crc = crc32(data);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x0403_4b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(0x0800, 6);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(crc, 14);
+  local.writeUInt32LE(compressed.length, 18);
+  local.writeUInt32LE(declaredSize, 22);
+  local.writeUInt16LE(entryName.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x0201_4b50, 0);
+  central.writeUInt16LE(3 << 8, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0x0800, 8);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(crc, 16);
+  central.writeUInt32LE(compressed.length, 20);
+  central.writeUInt32LE(declaredSize, 24);
+  central.writeUInt16LE(entryName.length, 28);
+  central.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+  central.writeUInt32LE(0, 42);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x0605_4b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(central.length + entryName.length, 12);
+  end.writeUInt32LE(local.length + entryName.length + compressed.length, 16);
+  return new Uint8Array(Buffer.concat([local, entryName, compressed, central, entryName, end]));
+}
+
 function centralMetadata(archive: Uint8Array): Array<{ name: string; dosTime: number; dosDate: number }> {
   const view = Buffer.from(archive);
   const result: Array<{ name: string; dosTime: number; dosDate: number }> = [];
@@ -253,6 +289,30 @@ describe("packWebVst", () => {
     await writeFile(join(root, "resources/data.bin"), "tampered");
 
     await expect(packWebVst(root)).rejects.toThrow(/hash mismatch.*resources\/data\.bin/i);
+  });
+
+  it("rejects program entries whose artifact is absent or range exceeds the artifact", async () => {
+    const root = await staging();
+    const module = probeableWasm();
+    const base = manifest(module);
+    const withProgram = (artifactId: string, offset: number, size: number) => manifest(module, {
+      classes: [{ ...base.classes[0], programs: { categories: [{ name: "Factory", entries: [{ name: "Init", artifactId, offset, size }] }] } }],
+    });
+
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(withProgram("missing", 0, 0))}\n`);
+    await expect(packWebVst(root)).rejects.toThrow(/program.*artifact.*missing|artifact.*missing/i);
+
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(withProgram("fixture-resource", 7, 2))}\n`);
+    await expect(packWebVst(root)).rejects.toThrow(/program.*range|program.*artifact/i);
+  });
+
+  it("rejects modules without the runtime-required standalone initializer", async () => {
+    const root = await staging();
+    const module = probeableWasm(false);
+    await writeFile(join(root, "module.wasm"), module);
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(manifest(module))}\n`);
+
+    await expect(packWebVst(root)).rejects.toThrow(/missing ABI export _initialize/i);
   });
 
   it("rejects executable JavaScript sidecars under approved roots", async () => {
@@ -365,6 +425,12 @@ describe("archive validation", () => {
     const archive = storedZip([0, 1, 2].map((index) => ({ name: `resources/${index}.bin`, uncompressedSize: size })));
 
     await expect(verifyWebVst(archive)).rejects.toThrow(/total expanded.*1 GiB/i);
+  });
+
+  it("stops deflate extraction at the declared expanded size", async () => {
+    const archive = deflatedZip("plugin.json", encoder.encode("x".repeat(4096)), 32);
+
+    await expect(verifyWebVst(archive)).rejects.toThrow(/cannot decompress/i);
   });
 });
 

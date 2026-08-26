@@ -170,7 +170,7 @@ export async function probeWasm(wasm: Uint8Array): Promise<ProbedClass[]> {
   if (!(exports.memory instanceof WebAssembly.Memory)) fail("missing ABI export memory");
   const memory = exports.memory;
   environment.bindMemory(memory);
-  optionalFunction(exports, "_initialize")?.();
+  requiredFunction(exports, "_initialize")();
   if (abiU32(requiredFunction(exports, "pvst_abi_version")(), "ABI version") !== 1) fail("ABI version is not 1");
   const malloc = allocatorFunction(exports, "malloc");
   const free = allocatorFunction(exports, "free");

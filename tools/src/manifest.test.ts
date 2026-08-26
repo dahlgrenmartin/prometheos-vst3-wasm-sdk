@@ -48,6 +48,7 @@ function installWasmProbe(classes: Class[], imports: WebAssembly.ModuleImportDes
     };
   const exports = {
     memory,
+    _initialize: () => undefined,
     malloc: (size: number) => {
       const allocation = cursor;
       cursor += size;
@@ -402,5 +403,26 @@ describe("generateManifest", () => {
       module: { path: "plugin.wasm", sha256: "0".repeat(64), unexpected: true },
       classes: [],
     })).toThrow("strict schema");
+  });
+
+  it("rejects duplicate class UIDs and artifact IDs in hand-authored manifests", () => {
+    const base = {
+      schemaVersion: 1,
+      packageId: "org.prometheos.fixtures",
+      version: "1.0.0",
+      abi: "prometheos-vst3-wasm-1",
+      module: { path: "plugin.wasm", sha256: "0".repeat(64) },
+      classes: [
+        { classUid: canonicalInstrument, name: "First", vendor: "Prometheos", kind: "instrument", exposedParameters: [] },
+        { classUid: canonicalInstrument, name: "Second", vendor: "Prometheos", kind: "effect", exposedParameters: [] },
+      ],
+      artifacts: [
+        { id: "preset", path: "presets/one.bin", sha256: "1".repeat(64), role: "preset" },
+        { id: "preset", path: "presets/two.bin", sha256: "2".repeat(64), role: "preset" },
+      ],
+    };
+
+    expect(() => validateManifest(base)).toThrow(/duplicate class UID/i);
+    expect(() => validateManifest({ ...base, classes: [base.classes[0]] })).toThrow(/duplicate artifact ID/i);
   });
 });

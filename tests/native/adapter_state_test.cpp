@@ -38,6 +38,33 @@ int process_test ();
 int lifecycle_test ();
 
 int main () {
+  fake_vst3::failures.reset ();
+  fake_vst3::failures.combined_controller = true;
+  const auto combined_source = pvst_create (0, 48000., 128);
+  require (combined_source != 0);
+  require (pvst_param_set (combined_source, fake_vst3::kGainId, .25f) == PVST_OK);
+  const auto combined_size = pvst_state_size (combined_source);
+  require (combined_size == 16 + sizeof (double));
+  std::array<unsigned char, 256> combined_bytes {};
+  require (pvst_state_write (combined_source, combined_bytes.data (), combined_size) == PVST_OK);
+  require (read_u32 (combined_bytes.data () + 8) == sizeof (double));
+  require (read_u32 (combined_bytes.data () + 12) == 0);
+
+  const auto combined_target = pvst_create (0, 48000., 128);
+  require (combined_target != 0);
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (combined_target, combined_bytes.data (), combined_size) == PVST_OK);
+  require_state_calls ({fake_vst3::Call::ComponentStateLoad});
+  require (pvst_param_get (combined_target, fake_vst3::kGainId) == .25f);
+  auto combined_with_controller_payload = combined_bytes;
+  write_u32 (combined_with_controller_payload.data () + 12, 1);
+  fake_vst3::failures.clear_calls ();
+  require (pvst_state_load (combined_target, combined_with_controller_payload.data (), combined_size + 1) == PVST_ERROR_ARGUMENT);
+  require (state_call_count () == 0);
+  pvst_destroy (combined_source);
+  pvst_destroy (combined_target);
+  require (fake_vst3::failures.live_objects == 0);
+
   lifecycle_test ();
   process_test ();
 
@@ -101,6 +128,7 @@ int main () {
 
   pvst_destroy (first);
   pvst_destroy (second);
+
   require (fake_vst3::failures.live_objects == 0);
   return 0;
 }

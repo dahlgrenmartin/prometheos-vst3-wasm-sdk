@@ -77,7 +77,18 @@ function validCuration(value: unknown): AuthorParameterCuration[] {
 export function validateManifest(value: unknown): WebVstManifestV1 {
   const parsed = manifestSchema.safeParse(value);
   if (!parsed.success) fail(`final manifest does not satisfy the strict schema: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`);
-  return parsed.data as WebVstManifestV1;
+  const manifest = parsed.data as WebVstManifestV1;
+  const classUids = new Set<string>();
+  for (const entry of manifest.classes) {
+    if (classUids.has(entry.classUid)) fail(`duplicate class UID ${entry.classUid}`);
+    classUids.add(entry.classUid);
+  }
+  const artifactIds = new Set<string>();
+  for (const artifact of manifest.artifacts ?? []) {
+    if (artifactIds.has(artifact.id)) fail(`duplicate artifact ID ${artifact.id}`);
+    artifactIds.add(artifact.id);
+  }
+  return manifest;
 }
 
 function clampUnit(value: number): number {
