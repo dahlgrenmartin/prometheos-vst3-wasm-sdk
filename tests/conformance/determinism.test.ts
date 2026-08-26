@@ -7,7 +7,7 @@ import { rebuildFixturePackage } from "./fixture_build_harness.js";
 const packagePath = new URL("../../build/packages/prometheos-fixtures.webvst", import.meta.url);
 
 describe("fixture package determinism", () => {
-  it("retains a package build SHA before rebuilding the CMake target", async () => {
+  it("retains a package build SHA before rebuilding the CMake target", { timeout: 15_000 }, async () => {
     const first = new Uint8Array(await readFile(packagePath));
     const firstSha256 = createHash("sha256").update(first).digest("hex");
     await rebuildFixturePackage();

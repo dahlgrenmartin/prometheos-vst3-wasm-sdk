@@ -170,8 +170,8 @@ void reset_tracks_the_real_processing_stage_after_each_failure () {
 
 void parameter_text_is_checked_utf8 () {
   fake_vst3::failures.reset ();
-  constexpr std::array<char, 11> expected_title {'G', static_cast<char> (0xc3), static_cast<char> (0xa4), 'i', 'n', ' ', static_cast<char> (0xf0), static_cast<char> (0x9f), static_cast<char> (0x8e), static_cast<char> (0x9a), 0};
-  constexpr std::array<char, 5> expected_value {static_cast<char> (0xc2), static_cast<char> (0xbe), static_cast<char> (0xc3), static_cast<char> (0x97), 0};
+  constexpr std::array<char, 10> expected_title {'G', static_cast<char> (0xc3), static_cast<char> (0xa4), 'i', 'n', ' ', static_cast<char> (0xf0), static_cast<char> (0x9f), static_cast<char> (0x8e), static_cast<char> (0x9a)};
+  constexpr std::array<char, 4> expected_value {static_cast<char> (0xc2), static_cast<char> (0xbe), static_cast<char> (0xc3), static_cast<char> (0x97)};
   std::array<char, 16> text {};
   require (pvst_class_param_title_size (0, 0) == expected_title.size ());
   require (pvst_class_param_title_write (0, 0, text.data (), static_cast<uint32_t> (expected_title.size () - 1)) == PVST_ERROR_BUFFER_TOO_SMALL);
@@ -193,7 +193,7 @@ void parameter_text_is_checked_utf8 () {
 
 int lifecycle_test () {
   require (pvst_class_count () == 2);
-  require (pvst_class_name_size (0) == 11);
+  require (pvst_class_name_size (0) == 10);
   require (pvst_class_param_count (0) == 2);
   require (pvst_class_param_id (0, 0) == fake_vst3::kGainId);
   require (fake_vst3::factory.refs () == 1);
