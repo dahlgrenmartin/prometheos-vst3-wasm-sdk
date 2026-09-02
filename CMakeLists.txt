@@ -41,8 +41,23 @@ function(pvst_enable_sanitizers target visibility)
 endfunction()
 pvst_enable_sanitizers(prometheos_webvst_adapter PUBLIC)
 
+if(PVST_BUILD_FIXTURES)
+  if(NOT EMSCRIPTEN)
+    message(FATAL_ERROR "PVST_BUILD_FIXTURES requires the Emscripten toolchain")
+  endif()
+  find_program(PVST_PNPM_EXECUTABLE pnpm REQUIRED)
+  # The package targets run the TypeScript prober/packer, which compiles itself
+  # with the local TypeScript. Without the install the failure surfaces mid-build
+  # as an unhelpful "'tsc' is not recognized".
+  if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools/node_modules")
+    message(FATAL_ERROR
+      "Run 'pnpm --dir tools install --frozen-lockfile' before configuring the fixture build")
+  endif()
+endif()
+
 if(PVST_BUILD_TESTS OR PVST_BUILD_FIXTURES)
   add_subdirectory(fixtures)
+  add_subdirectory(conformance/adelay)
 endif()
 
 if(PVST_BUILD_TESTS)
@@ -75,12 +90,19 @@ if(PVST_BUILD_TESTS)
   target_link_libraries(actual_vst3_component_test PRIVATE
     prometheos_webvst_adapter actual_vst3_fixture_factory)
   add_test(NAME actual_vst3_component COMMAND actual_vst3_component_test)
+
+  add_executable(upstream_adelay_test tests/native/upstream_adelay_test.cpp)
+  target_compile_features(upstream_adelay_test PRIVATE cxx_std_17)
+  target_sources(upstream_adelay_test PRIVATE $<TARGET_OBJECTS:upstream_adelay_factory>)
+  target_link_libraries(upstream_adelay_test PRIVATE
+    prometheos_webvst_adapter upstream_adelay_vst3_support)
+  add_test(NAME upstream_adelay COMMAND upstream_adelay_test)
   if(PVST_ENABLE_SANITIZERS AND MSVC)
     get_filename_component(_pvst_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set(_pvst_asan_runtimes
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dbg_dynamic-x86_64.dll"
       "${_pvst_msvc_bin_dir}/clang_rt.asan_dynamic-x86_64.dll")
-    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests actual_vst3_fixture_test actual_vst3_component_test)
+    foreach(_pvst_sanitized_target abi_header_test webvst_adapter_tests actual_vst3_fixture_test actual_vst3_component_test upstream_adelay_test)
       foreach(_pvst_asan_runtime IN LISTS _pvst_asan_runtimes)
         if(EXISTS "${_pvst_asan_runtime}")
         add_custom_command(TARGET ${_pvst_sanitized_target} POST_BUILD
@@ -142,11 +164,6 @@ endforeach()
 endif()
 
 if(PVST_BUILD_FIXTURES)
-  if(NOT EMSCRIPTEN)
-    message(FATAL_ERROR "PVST_BUILD_FIXTURES requires the Emscripten toolchain")
-  endif()
-  find_program(PVST_PNPM_EXECUTABLE pnpm REQUIRED)
-
   add_executable(webvst_fixture fixtures/bundle/wasm_entry.cpp)
   target_link_libraries(webvst_fixture PRIVATE
     prometheos_webvst_adapter

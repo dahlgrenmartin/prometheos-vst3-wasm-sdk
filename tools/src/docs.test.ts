@@ -11,10 +11,16 @@ async function text(relativePath: string): Promise<string> {
   return readFile(join(repositoryRoot, relativePath), "utf8");
 }
 
+// `git ls-files` also reports submodule gitlinks (mode 160000), which are
+// directories on disk and are pinned upstream sources rather than SDK-owned
+// ones. `--stage` exposes the mode so they are excluded before any file read.
 function trackedSourcePaths(): string[] {
-  return execFileSync("git", ["ls-files", "-z"], { cwd: repositoryRoot })
+  return execFileSync("git", ["ls-files", "-z", "--stage"], { cwd: repositoryRoot })
     .toString()
     .split("\0")
+    .filter(Boolean)
+    .filter((entry) => !entry.startsWith("160000 "))
+    .map((entry) => entry.slice(entry.indexOf("\t") + 1))
     .filter((file) => file && !file.endsWith(".png") && !file.endsWith(".pdf"));
 }
 
@@ -95,8 +101,13 @@ describe("published SDK contract documentation", () => {
     expect(hasAbsoluteBuildPath(["", "opt", "sdk", "build", "packages", "plugin.webvst"].join("/"))).toBe(true);
     expect(hasAbsoluteBuildPath(["", "var", "cache", "build"].join("/"))).toBe(true);
     expect(hasAbsoluteBuildPath(["https:", "", "example.test", "build", "plugin.wasm"].join("/"))).toBe(false);
+    const tracked = trackedSourcePaths();
+    // The pinned conformance submodule is upstream source, not SDK-owned, and
+    // its gitlink entry is a directory that cannot be read as a file.
+    expect(tracked).toContain("include/prometheos/webvst.h");
+    expect(tracked).not.toContain("third_party/public.sdk");
     const offenders: string[] = [];
-    for (const file of trackedSourcePaths()) {
+    for (const file of tracked) {
       const contents = await text(file);
       if (contents.includes("\0")) continue;
       if (hasAbsoluteBuildPath(contents)) offenders.push(file);

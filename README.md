@@ -14,26 +14,33 @@ create a tag and makes no trademark claim about the `.webvst` suffix.
 ## Quick start
 
 The supported toolchain is CMake 3.20+, C++17, Emscripten **4.0.10**, pnpm
-**9.15.9**, and Ninja **1.11.1.3**. Install the tools, then configure the
-fixture using an explicit path to the Ninja executable:
+**9.15.9**, and Ninja **1.11.1.3**. Clone with the pinned conformance submodule
+(`git clone --recurse-submodules`, or `git submodule update --init` afterwards),
+install the tools and the TypeScript packer that the fixture targets invoke, then
+configure using an explicit path to the Ninja executable:
 
 ```sh
 corepack prepare pnpm@9.15.9 --activate
 python3 -m pip install --user ninja==1.11.1.3
+pnpm --dir tools install --frozen-lockfile
 NINJA_BIN="$(command -v ninja)"
 EMSCRIPTEN_TOOLCHAIN="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
 cmake -S . -B build/wasm -G Ninja \
   -DCMAKE_MAKE_PROGRAM="$NINJA_BIN" \
   -DCMAKE_TOOLCHAIN_FILE="$EMSCRIPTEN_TOOLCHAIN" \
   -DPVST_BUILD_FIXTURES=ON
-cmake --build build/wasm --target webvst_fixture_package
+cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package
 ```
 
-The generated fixture package is `build/packages/prometheos-fixtures.webvst`.
-Install dependencies and run the TypeScript checks with:
+The generated packages are `build/packages/prometheos-fixtures.webvst` and
+`build/packages/steinberg-adelay.webvst`. The latter compiles the pinned,
+untouched Steinberg ADelay VST3 processor, controller, and factory sources
+through the generic adapter; the same sources also build as the native
+`steinberg_adelay_vst3` target.
+
+Run the TypeScript checks with:
 
 ```sh
-pnpm --dir tools install --frozen-lockfile
 pnpm --dir tools test
 pnpm --dir tools typecheck
 ```

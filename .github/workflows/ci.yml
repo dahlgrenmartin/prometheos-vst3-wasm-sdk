@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -74,7 +76,7 @@ jobs:
             -DPVST_BUILD_FIXTURES=ON
 
       - name: Build Emscripten fixture package
-        run: cmake --build build/wasm --target webvst_fixture_package --parallel
+        run: cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package --parallel
 
       - name: Run TypeScript tests and typecheck
         run: |
@@ -86,15 +88,22 @@ jobs:
         shell: bash
         run: |
           cp build/packages/prometheos-fixtures.webvst "${RUNNER_TEMP}/first.webvst"
+          cp build/packages/steinberg-adelay.webvst "${RUNNER_TEMP}/first-adelay.webvst"
           sha256sum "${RUNNER_TEMP}/first.webvst"
+          sha256sum "${RUNNER_TEMP}/first-adelay.webvst"
           rm -rf build/wasm build/packages
           cmake -S . -B build/wasm -G Ninja \
             -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
             -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
             -DPVST_BUILD_FIXTURES=ON
-          cmake --build build/wasm --target webvst_fixture_package --parallel
+          cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package --parallel
           cmp --silent "${RUNNER_TEMP}/first.webvst" build/packages/prometheos-fixtures.webvst
+          cmp --silent "${RUNNER_TEMP}/first-adelay.webvst" build/packages/steinberg-adelay.webvst
           sha256sum build/packages/prometheos-fixtures.webvst
+          sha256sum build/packages/steinberg-adelay.webvst
+
+      - name: Verify upstream source remains untouched
+        run: git -C third_party/public.sdk diff --exit-code
 
       - name: Run Emscripten package conformance
         run: pnpm --dir tools test:conformance
@@ -105,6 +114,7 @@ jobs:
           name: webvst-sdk-ci
           path: |
             build/packages/prometheos-fixtures.webvst
+            build/packages/steinberg-adelay.webvst
             schema/plugin.schema.json
             include/prometheos/webvst.h
             build/wasm/libprometheos_webvst_adapter.a
