@@ -14,7 +14,7 @@ The schema is `schema/plugin.schema.json` (JSON Schema draft 2020-12, strict
 | `schemaVersion` | Integer constant `1`. |
 | `packageId` | Lowercase reverse-DNS identifier, with nonempty dot-separated labels. |
 | `version` | Nonempty package version string. |
-| `abi` | Exact string `prometheos-vst3-wasm-1`. |
+| `abi` | Exact string `webvst-vst3-wasm-1`. |
 | `module` | Object naming the WebAssembly module and its SHA-256. |
 | `classes` | Array of ABI-discovered class descriptors. |
 | `artifacts` | Optional array of preset/resource descriptors. |
@@ -23,14 +23,24 @@ The schema is `schema/plugin.schema.json` (JSON Schema draft 2020-12, strict
 POSIX path and `sha256` is 64 lowercase hexadecimal characters. Every `class`
 has required `classUid`, `name`, `vendor`, `kind`, and `exposedParameters`;
 `classUid` is 32 lowercase hexadecimal characters and `kind` is `instrument` or
-`effect`. `exposedParameters` entries have `parameterId` (an unsigned 32-bit
-integer) and `buzz`.
+`effect`. An `exposedParameter` is a generic, ABI-derived descriptor with
+required `parameterId` (an unsigned 32-bit integer), `name`, `description`,
+`flags` (the ABI parameter flag bits), `stepCount` (`0` for a continuous
+parameter), and `defaultValue` (the normalized default in the closed interval
+[0, 1]). Its optional `display` object may contain `unit` (`%`, `Hz`, `ms`,
+`dB`, or `ticks`), `min`, `max`, `precision` (nonnegative integer), `curve`
+(`linear` or `exp`), and `choices` (an array of strings).
 
-The `buzz` object has required `type`, `name`, `description`, `minValue`,
-`maxValue`, `noValue`, `defValue`, and `flags`. `type` is `note`, `switch`,
-`byte`, or `word`. Its optional `display` object may contain `unit` (`%`,
-`Hz`, `ms`, `dB`, or `ticks`), `min`, `max`, `precision` (nonnegative integer),
-`curve` (`linear` or `exp`), and `choices` (an array of strings).
+No host convention appears in that descriptor. A parameter may also carry an
+optional `extensions` object whose keys are lowercase namespaces, each holding
+one host's projection of the parameter. The format defines one such namespace,
+`buzz`, and a consumer that does not recognise a namespace ignores it; the
+generic descriptor above is complete without any of them.
+
+The `buzz` extension has required `type` (`note`, `switch`, `byte`, or `word`),
+`minValue`, `maxValue`, `noValue`, `defValue`, and `flags`. It expresses the
+parameter in the integer value model that host uses, including its reserved
+no-value sentinel.
 
 The optional `programs` object on a class contains `categories`; each
 `category` has `name` and `entries`; each `program` entry has `name`,
@@ -84,21 +94,30 @@ makes additions reviewable without relying on a prose occurrence elsewhere.
 | Property | Meaning |
 | --- | --- |
 | `parameterId` | Unsigned ABI parameter ID. |
-| `buzz` | Host-facing parameter descriptor. |
+| `name` | Display name. |
+| `description` | Display description. |
+| `flags` | ABI parameter flag bits. |
+| `stepCount` | Discrete step count, `0` when continuous. |
+| `defaultValue` | Normalized ABI default. |
+| `display` | Optional presentation metadata. |
+| `extensions` | Optional namespaced host projections. |
+
+### `extensions` object
+
+| Property | Meaning |
+| --- | --- |
+| `buzz` | Optional Buzz value-model projection. |
 
 ### `buzzParameter` object
 
 | Property | Meaning |
 | --- | --- |
 | `type` | Host parameter type. |
-| `name` | Display name. |
-| `description` | Display description. |
 | `minValue` | Minimum host value. |
 | `maxValue` | Maximum host value. |
 | `noValue` | Host no-value sentinel. |
 | `defValue` | Host default value. |
 | `flags` | Host parameter flags. |
-| `display` | Optional presentation metadata. |
 
 ### `display` object
 
@@ -143,13 +162,19 @@ makes additions reviewable without relying on a prose occurrence elsewhere.
 | `role` | Preset or resource role. |
 
 The manifest generator probes ABI metadata rather than trusting author input.
-Automatable, non-read-only parameters are exposed by default. Continuous
-parameters map to word values 0..65534 (no-value 65535); discrete parameters
-map to byte values 0..stepCount (no-value 255) for at most 254 steps and to word
-values otherwise. Defaults are normalized and rounded. Discrete display choices
-come from ABI value text. Author curation can change presentation fields or
+Automatable, non-read-only parameters are exposed by default, carrying the ABI's
+own flags, step count, and normalized default. Discrete display choices come
+from ABI value text. Author curation can change presentation fields or
 explicitly expose/hide a valid parameter, but cannot forge ABI ranges, flags,
-types, IDs, or class metadata.
+step counts, defaults, IDs, or class metadata.
+
+The generator emits the `buzz` extension by default so that hosts using that
+value model keep working; a host-neutral package omits it. Within that
+extension, continuous parameters map to word values 0..65534 (no-value 65535),
+and discrete parameters map to byte values 0..stepCount (no-value 255) for at
+most 254 steps and to word values otherwise, with the normalized default scaled
+and rounded. The verifier re-derives both the generic descriptor and any
+extension it recognises from the module itself, so neither can be forged.
 
 ## Archive rules
 

@@ -6,7 +6,7 @@
 
 #include <cstring>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace {
@@ -26,7 +26,7 @@ public:
   uint32 PLUGIN_API release () override { return --refs_; }
   tresult PLUGIN_API getFactoryInfo (PFactoryInfo* info) override {
     if (!info) return kInvalidArgument;
-    *info = PFactoryInfo ("Prometheos", "https://prometheos.dev", "sdk@prometheos.dev", 0);
+    *info = PFactoryInfo ("WebVST SDK", "", "", 0);
     return kResultOk;
   }
   int32 PLUGIN_API countClasses () override { return 4; }
@@ -44,7 +44,7 @@ public:
     if (!info || index < 0 || index >= countClasses ()) return kInvalidArgument;
     PClassInfo base {}; getClassInfo (index, &base);
     const char* subcategories = index == 0 ? "Instrument|Synth" : index == 1 ? "Fx" : "";
-    *info = PClassInfo2 (base.cid, base.cardinality, base.category, base.name, 0, subcategories, "Prometheos", "1.0.0", "3.8.0");
+    *info = PClassInfo2 (base.cid, base.cardinality, base.category, base.name, 0, subcategories, "WebVST SDK", "1.0.0", "3.8.0");
     return kResultOk;
   }
   tresult PLUGIN_API createInstance (FIDString cid, FIDString iid, void** out) override {
@@ -66,9 +66,9 @@ private:
 
 FixtureFactory factory;
 } // namespace
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures
 
 extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory () {
-  prometheos::fixtures::factory.addRef ();
-  return &prometheos::fixtures::factory;
+  webvst::fixtures::factory.addRef ();
+  return &webvst::fixtures::factory;
 }

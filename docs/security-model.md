@@ -38,7 +38,7 @@ The adapter bounds class and parameter discovery, process blocks (128 frames),
 event and parameter queues (64 entries/points), handle slots (32), strings, and
 state envelopes. It rejects invalid normalized values, notes outside 0..127,
 stale handles, malformed state lengths, and unsupported VST3 bus layouts.
-State is opaque component/controller data inside the checked v1 `PVST` envelope;
+State is opaque component/controller data inside the checked v1 `WVST` envelope;
 hosts should treat it as untrusted and retain the same size limits when storing
 it.
 

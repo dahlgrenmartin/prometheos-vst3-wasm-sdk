@@ -1,8 +1,11 @@
-export const WEBVST_ABI = "prometheos-vst3-wasm-1" as const;
+export const WEBVST_ABI = "webvst-vst3-wasm-1" as const;
+
+/** Namespace of the optional Buzz host projection carried under `extensions`. */
+export const BUZZ_EXTENSION = "buzz" as const;
 
 export type BuzzParameterType = "note" | "switch" | "byte" | "word";
 
-export interface BuzzParameterDisplay {
+export interface ParameterDisplay {
   unit?: "%" | "Hz" | "ms" | "dB" | "ticks";
   min?: number;
   max?: number;
@@ -11,16 +14,38 @@ export interface BuzzParameterDisplay {
   choices?: string[];
 }
 
-export interface BuzzParameter {
+/**
+ * Host-specific projection of an ABI parameter onto Buzz's integer value model.
+ * It is optional: the generic descriptor above it is complete on its own, and a
+ * host that does not use these conventions ignores the whole namespace.
+ */
+export interface BuzzParameterExtension {
   type: BuzzParameterType;
-  name: string;
-  description: string;
   minValue: number;
   maxValue: number;
   noValue: number;
   defValue: number;
   flags: number;
-  display?: BuzzParameterDisplay;
+}
+
+export interface ParameterExtensions {
+  buzz?: BuzzParameterExtension;
+  [namespace: string]: unknown;
+}
+
+/** Generic, ABI-derived parameter descriptor. No host conventions here. */
+export interface WebVstParameter {
+  parameterId: number;
+  name: string;
+  description: string;
+  /** ABI flag bits: automatable (1), read-only (2). */
+  flags: number;
+  /** 0 for a continuous parameter, otherwise the number of discrete steps. */
+  stepCount: number;
+  /** Normalized default in [0, 1]. */
+  defaultValue: number;
+  display?: ParameterDisplay;
+  extensions?: ParameterExtensions;
 }
 
 export interface WebVstManifestClass {
@@ -28,10 +53,7 @@ export interface WebVstManifestClass {
   name: string;
   vendor: string;
   kind: "instrument" | "effect";
-  exposedParameters: Array<{
-    parameterId: number;
-    buzz: BuzzParameter;
-  }>;
+  exposedParameters: WebVstParameter[];
   programs?: {
     categories: Array<{
       name: string;
@@ -67,12 +89,10 @@ export interface AuthorParameterCuration {
   classUid: string;
   parameterId: number;
   expose?: boolean;
-  /** Presentation-only tweaks applied after the ABI has supplied the base descriptor. */
-  buzz?: {
-    name?: string;
-    description?: string;
-    display?: Omit<BuzzParameterDisplay, "choices">;
-  };
+  /** Presentation-only tweaks applied after the ABI has supplied the descriptor. */
+  name?: string;
+  description?: string;
+  display?: Omit<ParameterDisplay, "choices">;
 }
 
 export interface ManifestAuthorConfig {
@@ -81,6 +101,11 @@ export interface ManifestAuthorConfig {
   version: string;
   modulePath: string;
   curation?: AuthorParameterCuration[];
+  /**
+   * Host extension namespaces to emit. Defaults to the Buzz projection so that
+   * existing hosts keep working; pass an empty array for a host-neutral package.
+   */
+  extensions?: readonly string[];
 }
 
 export interface ProbedParameter {

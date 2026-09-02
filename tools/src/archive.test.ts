@@ -65,11 +65,11 @@ function probeableWasm(includeInitializer = true): Uint8Array {
   const globals = section(6, vector([[0x7f, 1, ...i32const(0), 0x0b]]));
   const exported = [
     ["memory", 2, 0], ["_initialize", 0, 1], ["malloc", 0, 2], ["free", 0, 3],
-    ["pvst_abi_version", 0, 4], ["pvst_class_count", 0, 5], ["pvst_class_uid_size", 0, 6], ["pvst_class_uid_write", 0, 7],
-    ["pvst_class_name_size", 0, 8], ["pvst_class_name_write", 0, 9], ["pvst_class_vendor_size", 0, 10], ["pvst_class_vendor_write", 0, 11],
-    ["pvst_class_kind", 0, 12], ["pvst_class_param_count", 0, 13], ["pvst_class_param_id", 0, 14],
-    ["pvst_class_param_flags", 0, 15], ["pvst_class_param_step_count", 0, 16], ["pvst_class_param_default", 0, 17],
-    ["pvst_class_param_title_size", 0, 18],
+    ["webvst_abi_version", 0, 4], ["webvst_class_count", 0, 5], ["webvst_class_uid_size", 0, 6], ["webvst_class_uid_write", 0, 7],
+    ["webvst_class_name_size", 0, 8], ["webvst_class_name_write", 0, 9], ["webvst_class_vendor_size", 0, 10], ["webvst_class_vendor_write", 0, 11],
+    ["webvst_class_kind", 0, 12], ["webvst_class_param_count", 0, 13], ["webvst_class_param_id", 0, 14],
+    ["webvst_class_param_flags", 0, 15], ["webvst_class_param_step_count", 0, 16], ["webvst_class_param_default", 0, 17],
+    ["webvst_class_param_title_size", 0, 18],
   ].filter(([label]) => includeInitializer || label !== "_initialize")
     .map(([label, kind, index]) => [...name(label as string), kind as number, ...u32leb(index as number)]);
   const exports = section(7, vector(exported));
@@ -91,9 +91,9 @@ function manifest(module: Uint8Array, overrides: Record<string, unknown> = {}) {
   const resource = encoder.encode("resource");
   return {
     schemaVersion: 1,
-    packageId: "com.prometheos.fixture",
+    packageId: "org.webvst.fixture",
     version: "1.2.3",
-    abi: "prometheos-vst3-wasm-1",
+    abi: "webvst-vst3-wasm-1",
     module: { path: "module.wasm", sha256: sha256(module) },
     classes: [{
       classUid,
@@ -102,7 +102,8 @@ function manifest(module: Uint8Array, overrides: Record<string, unknown> = {}) {
       kind: "instrument",
       exposedParameters: [{
         parameterId: 0xffff_ffff,
-        buzz: { type: "word", name: "", description: "", minValue: 0, maxValue: 65534, noValue: 65535, defValue: 0, flags: 1 },
+        name: "", description: "", flags: 1, stepCount: 0, defaultValue: 0,
+        extensions: { buzz: { type: "word", minValue: 0, maxValue: 65534, noValue: 65535, defValue: 0, flags: 1 } },
       }],
     }],
     artifacts: [{ id: "fixture-resource", path: "resources/data.bin", sha256: sha256(resource), role: "resource" }],
@@ -354,7 +355,7 @@ describe("packWebVst", () => {
         ...base.classes[0],
         exposedParameters: [{
           ...base.classes[0].exposedParameters[0],
-          buzz: { ...base.classes[0].exposedParameters[0].buzz, name: "Curated name", description: "Curated description", display: { unit: "dB", precision: 1 } },
+          name: "Curated name", description: "Curated description", display: { unit: "dB", precision: 1 },
         }],
       }],
     });
@@ -439,21 +440,45 @@ describe("inspectWebVst", () => {
     const archive = await packWebVst(await staging());
 
     await expect(inspectWebVst(archive)).resolves.toEqual({
-      packageId: "com.prometheos.fixture",
+      packageId: "org.webvst.fixture",
       version: "1.2.3",
       archiveSha256: sha256(archive),
-      abi: "prometheos-vst3-wasm-1",
+      abi: "webvst-vst3-wasm-1",
       classes: [{ classUid, name: "", kind: "instrument", parameterCount: 1 }],
       artifacts: [{ id: "fixture-resource", path: "resources/data.bin", sha256: sha256(encoder.encode("resource")) }],
     });
   });
 
-  it("rejects an ABI-derived parameter descriptor mismatch", async () => {
+  it("rejects a forged generic parameter descriptor", async () => {
+    for (const forge of [
+      (parameter: Record<string, unknown>) => { parameter.stepCount = 7; },
+      (parameter: Record<string, unknown>) => { parameter.defaultValue = 0.5; },
+      (parameter: Record<string, unknown>) => { parameter.flags = 0; },
+    ]) {
+      const root = await staging();
+      const module = probeableWasm();
+      const value = manifest(module);
+      forge(value.classes[0].exposedParameters[0]);
+      await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+      await expect(packWebVst(root)).rejects.toThrow(/parameter.*mismatch|descriptor/i);
+    }
+  });
+
+  it("rejects a forged host extension while the generic descriptor is intact", async () => {
     const root = await staging();
     const module = probeableWasm();
     const value = manifest(module);
-    value.classes[0].exposedParameters[0].buzz.maxValue = 1;
+    value.classes[0].exposedParameters[0].extensions.buzz.maxValue = 1;
     await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
-    await expect(packWebVst(root)).rejects.toThrow(/parameter.*mismatch|descriptor/i);
+    await expect(packWebVst(root)).rejects.toThrow(/buzz extension mismatch/i);
+  });
+
+  it("accepts a host-neutral package that carries no extensions at all", async () => {
+    const root = await staging();
+    const module = probeableWasm();
+    const value = manifest(module);
+    delete (value.classes[0].exposedParameters[0] as Record<string, unknown>).extensions;
+    await writeFile(join(root, "plugin.json"), `${JSON.stringify(value)}\n`);
+    await expect(packWebVst(root)).resolves.toBeInstanceOf(Uint8Array);
   });
 });

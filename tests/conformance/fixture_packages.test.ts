@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { loadFixturePackage } from "./fixture_package_harness.js";
 
-const packagePath = new URL("../../build/packages/prometheos-fixtures.webvst", import.meta.url);
+const packagePath = new URL("../../build/packages/webvst-fixtures.webvst", import.meta.url);
 const frameCounts = [0, 1, 31, 32, 63, 64, 127, 128] as const;
 
 describe("Emscripten fixture package", () => {

@@ -1,6 +1,6 @@
 // The standalone Emscripten module uses --no-entry; CMake still requires a
 // translation unit for the executable target that links the adapter fixture.
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 void wasm_fixture_link_anchor () {}
 }
 

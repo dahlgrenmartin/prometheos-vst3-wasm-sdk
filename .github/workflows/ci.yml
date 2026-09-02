@@ -59,8 +59,8 @@ jobs:
         run: |
           cmake -S . -B build/native -G Ninja \
             -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
-            -DPVST_BUILD_TESTS=ON \
-            -DPVST_ENABLE_SANITIZERS=ON
+            -DWEBVST_BUILD_TESTS=ON \
+            -DWEBVST_ENABLE_SANITIZERS=ON
 
       - name: Build and test native adapter with sanitizers
         run: |
@@ -73,7 +73,7 @@ jobs:
           cmake -S . -B build/wasm -G Ninja \
             -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
             -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
-            -DPVST_BUILD_FIXTURES=ON
+            -DWEBVST_BUILD_FIXTURES=ON
 
       - name: Build Emscripten fixture package
         run: cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package --parallel
@@ -87,7 +87,7 @@ jobs:
       - name: Compare clean rebuild bytes
         shell: bash
         run: |
-          cp build/packages/prometheos-fixtures.webvst "${RUNNER_TEMP}/first.webvst"
+          cp build/packages/webvst-fixtures.webvst "${RUNNER_TEMP}/first.webvst"
           cp build/packages/steinberg-adelay.webvst "${RUNNER_TEMP}/first-adelay.webvst"
           sha256sum "${RUNNER_TEMP}/first.webvst"
           sha256sum "${RUNNER_TEMP}/first-adelay.webvst"
@@ -95,11 +95,11 @@ jobs:
           cmake -S . -B build/wasm -G Ninja \
             -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
             -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
-            -DPVST_BUILD_FIXTURES=ON
+            -DWEBVST_BUILD_FIXTURES=ON
           cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package --parallel
-          cmp --silent "${RUNNER_TEMP}/first.webvst" build/packages/prometheos-fixtures.webvst
+          cmp --silent "${RUNNER_TEMP}/first.webvst" build/packages/webvst-fixtures.webvst
           cmp --silent "${RUNNER_TEMP}/first-adelay.webvst" build/packages/steinberg-adelay.webvst
-          sha256sum build/packages/prometheos-fixtures.webvst
+          sha256sum build/packages/webvst-fixtures.webvst
           sha256sum build/packages/steinberg-adelay.webvst
 
       - name: Verify upstream source remains untouched
@@ -113,9 +113,9 @@ jobs:
         with:
           name: webvst-sdk-ci
           path: |
-            build/packages/prometheos-fixtures.webvst
+            build/packages/webvst-fixtures.webvst
             build/packages/steinberg-adelay.webvst
             schema/plugin.schema.json
-            include/prometheos/webvst.h
-            build/wasm/libprometheos_webvst_adapter.a
+            include/webvst/webvst.h
+            build/wasm/libwebvst_adapter.a
             tools/dist/

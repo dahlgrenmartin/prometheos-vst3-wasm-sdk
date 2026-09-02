@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A standalone SDK that publishes the **Prometheos WebVST ABI v1** contract: a C ABI
-(`include/prometheos/webvst.h`), a C++17 adapter that bridges it to a real VST3 factory,
+A standalone SDK that publishes the **WebVST ABI v1** contract: a C ABI
+(`include/webvst/webvst.h`), a C++17 adapter that bridges it to a real VST3 factory,
 a `.webvst` package format (`schema/plugin.schema.json`), and a TypeScript probe/packer.
 It ships no plugin of its own — the fixtures and the pinned Steinberg ADelay exist only
 to prove the contract.
@@ -14,8 +14,8 @@ It sits inside the `prometheos-dev` workspace directory but is **not** one of th
 workspace's submodules and shares none of its tooling (no pnpm workspace, no
 `@prometheos/shared`). Ignore the parent `pnpm dev` workflow here.
 
-The contract is frozen: the ABI string `prometheos-vst3-wasm-1`, `PVST_ABI_VERSION == 1`,
-`PVST_MAX_PROCESS_FRAMES == 128`, and the documented result codes are immutable. Behaviour
+The contract is frozen: the ABI string `webvst-vst3-wasm-1`, `WEBVST_ABI_VERSION == 1`,
+`WEBVST_MAX_PROCESS_FRAMES == 128`, and the documented result codes are immutable. Behaviour
 changes go in a future ABI version, never into v1. `NOTICE.md` also records that a
 naming/trademark review gates any public tag — do not create one.
 
@@ -23,14 +23,14 @@ naming/trademark review gates any public tag — do not create one.
 
 Pinned toolchain: CMake 3.20+, C++17, Emscripten **4.0.10**, pnpm **9.15.9**,
 Ninja **1.11.1.3**, Node 22. First: `git submodule update --init` — configuring with
-`PVST_BUILD_TESTS` or `PVST_BUILD_FIXTURES` hard-errors without `third_party/public.sdk`.
+`WEBVST_BUILD_TESTS` or `WEBVST_BUILD_FIXTURES` hard-errors without `third_party/public.sdk`.
 
 Two independent build trees; both are required for a full check.
 
 ```sh
 # Native adapter + tests, with sanitizers (build/native)
 cmake -S . -B build/native -G Ninja \
-  -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" -DPVST_BUILD_TESTS=ON -DPVST_ENABLE_SANITIZERS=ON
+  -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" -DWEBVST_BUILD_TESTS=ON -DWEBVST_ENABLE_SANITIZERS=ON
 cmake --build build/native --parallel
 ctest --test-dir build/native --output-on-failure
 ctest --test-dir build/native -R upstream_adelay --output-on-failure   # single test
@@ -39,7 +39,7 @@ ctest --test-dir build/native -R upstream_adelay --output-on-failure   # single 
 cmake -S . -B build/wasm -G Ninja \
   -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
   -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
-  -DPVST_BUILD_FIXTURES=ON
+  -DWEBVST_BUILD_FIXTURES=ON
 cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package
 
 # TypeScript tools
@@ -57,18 +57,18 @@ pnpm --dir tools run webvst -- inspect|verify <archive.webvst>
 ```
 
 `CMAKE_MAKE_PROGRAM` is deliberately explicit — CMake must use the environment's pinned
-Ninja. `PVST_BUILD_FIXTURES` requires the Emscripten toolchain and `pnpm` on `PATH`
-(CMake invokes the TypeScript packer as a build step). `PROMETHEOS_VST3_SDK_DIR` points
+Ninja. `WEBVST_BUILD_FIXTURES` requires the Emscripten toolchain and `pnpm` on `PATH`
+(CMake invokes the TypeScript packer as a build step). `WEBVST_VST3_SDK_DIR` points
 the build at a local VST3 SDK checkout instead of the pinned `FetchContent` download.
 
 Both package targets always write into the source tree at `build/packages/`
-(`prometheos-fixtures.webvst`, `steinberg-adelay.webvst`), regardless of the build dir.
+(`webvst-fixtures.webvst`, `steinberg-adelay.webvst`), regardless of the build dir.
 
 ## Architecture
 
 Four layers, each with a single seam to the next:
 
-**1. ABI (`include/prometheos/webvst.h`)** — flat C, `uint32_t` handles, no structs across
+**1. ABI (`include/webvst/webvst.h`)** — flat C, `uint32_t` handles, no structs across
 the boundary. Strings use a `*_size` / `*_write` pair (byte counts, no NUL). Audio is
 interleaved stereo `float32`, at most 128 frames per call.
 
@@ -77,7 +77,7 @@ interleaved stereo `float32`, at most 128 frames per call.
 - `adapter.cpp` — process-wide `Adapter` singleton, 32 instance slots, handles encoded as
   `(generation << 16) | (slot + 1)` so a stale handle cannot address a later instance.
   Class enumeration filters the factory to `kVstAudioEffectClass` and re-walks it per call.
-  This file also holds the `extern "C" pvst_*` wrappers.
+  This file also holds the `extern "C" webvst_*` wrappers.
 - `vst3_instance.cpp` — one VST3 component + controller pair: initialize, connect the two
   connection points, validate buses (exactly one main stereo output; effects may add one
   main stereo input), `setupProcessing`, activate, and unwind in exact reverse on any
@@ -86,7 +86,7 @@ interleaved stereo `float32`, at most 128 frames per call.
   (64 events, 64 parameter queues/points), no allocation on the audio path. Queues are
   cleared after **every** process attempt, including plugin failure.
 - `memory_stream.*` — `IBStream` over a vector, used for the state envelope: a 16-byte
-  little-endian header (`'PVST'`, version 1, component size, controller size) then the two
+  little-endian header (`'WVST'`, version 1, component size, controller size) then the two
   opaque blobs.
 
 **3. Proof harnesses** — `fixtures/` is a hand-written VST3 instrument + effect pair;
@@ -110,7 +110,7 @@ asserts that. Do not "simplify" it by reusing `tools/src`.
 
 Breaking any of these fails `.github/workflows/ci.yml`, usually far from the edit:
 
-- **Docs gates** (`tools/src/docs.test.ts`): every `pvst_*` declaration in the header must
+- **Docs gates** (`tools/src/docs.test.ts`): every `webvst_*` declaration in the header must
   appear in `docs/abi-v1.md` with its *exact* signature, and every `properties` object in
   `schema/plugin.schema.json` — recursively, including `$defs` and array `items` — must have
   a matching ``### `<label>` object`` table in `docs/package-format-v1.md` listing exactly
@@ -133,8 +133,8 @@ Breaking any of these fails `.github/workflows/ci.yml`, usually far from the edi
 
 ## Adding or changing an ABI export
 
-Five places, all of them: `include/prometheos/webvst.h`, the `extern "C"` block at the bottom
-of `src/adapter/adapter.cpp`, `PROMETHEOS_WEBVST_EXPORTS` in `cmake/WebVstExports.cmake`
+Five places, all of them: `include/webvst/webvst.h`, the `extern "C"` block at the bottom
+of `src/adapter/adapter.cpp`, `WEBVST_EXPORTS` in `cmake/WebVstExports.cmake`
 (the Emscripten `EXPORTED_FUNCTIONS` list, underscore-prefixed), the signature block in
 `docs/abi-v1.md`, and — if consumers call it — `tools/src/probe.ts` and/or
 `tests/conformance/package_consumer.ts`. Cover it in `tests/native/`.
@@ -150,8 +150,8 @@ of `src/adapter/adapter.cpp`, `PROMETHEOS_WEBVST_EXPORTS` in `cmake/WebVstExport
   `fixtures/bundle/wasm_entry.cpp` supplies `_initialize` and stubs `__wasi_fd_close`/`fd_seek`
   to keep them out of the import list; a consumer must call `_initialize` before any ABI call
   and must use a fresh WebAssembly instance and memory per plugin instance.
-- Any new native library that ends up in the same link as `prometheos_webvst_adapter` must
-  call `pvst_enable_sanitizers(<target> PRIVATE)`. The adapter carries `/fsanitize=address`
+- Any new native library that ends up in the same link as `webvst_adapter` must
+  call `webvst_enable_sanitizers(<target> PRIVATE)`. The adapter carries `/fsanitize=address`
   PUBLIC, and MSVC's ASan changes STL container annotations, so an unsanitized static library
   fails the link with `LNK2038: mismatch detected for 'annotate_vector'`. New test executables
   also need adding to the ASan-runtime copy loop in `CMakeLists.txt`. Linux/clang CI does not

@@ -1,5 +1,5 @@
 include_guard(GLOBAL)
 
-set(PROMETHEOS_WEBVST_EXPORTS
-  "['__initialize','_malloc','_free','_pvst_abi_version','_pvst_class_count','_pvst_class_uid_size','_pvst_class_uid_write','_pvst_class_name_size','_pvst_class_name_write','_pvst_class_vendor_size','_pvst_class_vendor_write','_pvst_class_kind','_pvst_class_param_count','_pvst_class_param_id','_pvst_class_param_flags','_pvst_class_param_step_count','_pvst_class_param_default','_pvst_class_param_title_size','_pvst_class_param_title_write','_pvst_class_param_value_text_size','_pvst_class_param_value_text_write','_pvst_create','_pvst_destroy','_pvst_reset','_pvst_process','_pvst_note_on','_pvst_note_off','_pvst_param_get','_pvst_param_set','_pvst_state_size','_pvst_state_write','_pvst_state_load']"
+set(WEBVST_EXPORTS
+  "['__initialize','_malloc','_free','_webvst_abi_version','_webvst_class_count','_webvst_class_uid_size','_webvst_class_uid_write','_webvst_class_name_size','_webvst_class_name_write','_webvst_class_vendor_size','_webvst_class_vendor_write','_webvst_class_kind','_webvst_class_param_count','_webvst_class_param_id','_webvst_class_param_flags','_webvst_class_param_step_count','_webvst_class_param_default','_webvst_class_param_title_size','_webvst_class_param_title_write','_webvst_class_param_value_text_size','_webvst_class_param_value_text_write','_webvst_create','_webvst_destroy','_webvst_reset','_webvst_process','_webvst_note_on','_webvst_note_off','_webvst_param_get','_webvst_param_set','_webvst_state_size','_webvst_state_write','_webvst_state_load']"
 )

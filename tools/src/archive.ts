@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { validateManifest } from "./manifest.js";
-import { probeWasm, PVST_PARAMETER_AUTOMATABLE, PVST_PARAMETER_READ_ONLY } from "./probe.js";
-import { WEBVST_ABI, type BuzzParameter, type ProbedParameter, type WebVstManifestV1 } from "./types.js";
+import { mapParameter, validateManifest } from "./manifest.js";
+import { probeWasm, WEBVST_PARAMETER_AUTOMATABLE, WEBVST_PARAMETER_READ_ONLY } from "./probe.js";
+import { BUZZ_EXTENSION, WEBVST_ABI, type ProbedParameter, type WebVstManifestV1, type WebVstParameter } from "./types.js";
 
 export const ARCHIVE_LIMITS = {
   maxEntries: 4_096,
@@ -212,34 +212,24 @@ function parseManifest(entries: ArchiveEntry[]): { manifest: WebVstManifestV1; b
   return { manifest, byName };
 }
 
-function expectedBuzzParameter(parameter: ProbedParameter): BuzzParameter {
-  const discrete = parameter.stepCount > 0;
-  const maxValue = discrete ? parameter.stepCount : 65_534;
-  const type = discrete && parameter.stepCount <= 254 ? "byte" : "word";
-  const noValue = type === "byte" ? 255 : 65_535;
-  const defValue = Math.round(Math.min(1, Math.max(0, parameter.defaultValue)) * maxValue);
-  return {
-    type,
-    name: parameter.title,
-    description: parameter.title,
-    minValue: 0,
-    maxValue,
-    noValue,
-    defValue,
-    flags: 1,
-    ...(discrete ? { display: { choices: parameter.displayValues } } : {}),
-  };
-}
-
-function verifyParameterDescriptor(classUid: string, parameter: ProbedParameter, buzz: BuzzParameter): void {
-  const expected = expectedBuzzParameter(parameter);
-  if (buzz.type !== expected.type ||
-      buzz.minValue !== expected.minValue || buzz.maxValue !== expected.maxValue || buzz.noValue !== expected.noValue ||
-      buzz.defValue !== expected.defValue || buzz.flags !== expected.flags) {
-    fail(`parameter mismatch for ${classUid}:${parameter.parameterId}`);
+// The manifest is never trusted: every descriptor is re-derived from the module
+// through the same mapping the packer used, and the optional host extension is
+// checked only when the package actually carries it.
+function verifyParameterDescriptor(classUid: string, probed: ProbedParameter, parameter: WebVstParameter): void {
+  const expected = mapParameter(probed, parameter.extensions?.buzz ? [BUZZ_EXTENSION] : []);
+  if (parameter.flags !== expected.flags || parameter.stepCount !== expected.stepCount || parameter.defaultValue !== expected.defaultValue) {
+    fail(`parameter mismatch for ${classUid}:${probed.parameterId}`);
   }
-  if (expected.display?.choices && JSON.stringify(buzz.display?.choices) !== JSON.stringify(expected.display.choices)) {
-    fail(`parameter display choices mismatch for ${classUid}:${parameter.parameterId}`);
+  if (expected.display?.choices && JSON.stringify(parameter.display?.choices) !== JSON.stringify(expected.display.choices)) {
+    fail(`parameter display choices mismatch for ${classUid}:${probed.parameterId}`);
+  }
+  const buzz = parameter.extensions?.buzz;
+  const expectedBuzz = expected.extensions?.buzz;
+  if (buzz && expectedBuzz) {
+    if (buzz.type !== expectedBuzz.type || buzz.minValue !== expectedBuzz.minValue || buzz.maxValue !== expectedBuzz.maxValue ||
+        buzz.noValue !== expectedBuzz.noValue || buzz.defValue !== expectedBuzz.defValue || buzz.flags !== expectedBuzz.flags) {
+      fail(`buzz extension mismatch for ${classUid}:${probed.parameterId}`);
+    }
   }
 }
 
@@ -262,12 +252,12 @@ async function verifyEntries(entries: ArchiveEntry[]): Promise<{ manifest: WebVs
     for (const parameter of expected.exposedParameters) {
       const actualParameter = actual.parameters.find((candidate) => candidate.parameterId === parameter.parameterId);
       if (!actualParameter) fail(`parameter mismatch for ${expected.classUid}:${parameter.parameterId}`);
-      verifyParameterDescriptor(expected.classUid, actualParameter, parameter.buzz);
+      verifyParameterDescriptor(expected.classUid, actualParameter, parameter);
     }
     if (new Set(expected.exposedParameters.map((parameter) => parameter.parameterId)).size !== expected.exposedParameters.length) fail(`duplicate exposed parameter for ${expected.classUid}`);
     for (const parameter of actual.parameters) {
       const exposed = expected.exposedParameters.some((candidate) => candidate.parameterId === parameter.parameterId);
-      if (exposed && ((parameter.flags & PVST_PARAMETER_AUTOMATABLE) === 0 || (parameter.flags & PVST_PARAMETER_READ_ONLY) !== 0)) fail(`parameter mismatch for ${expected.classUid}:${parameter.parameterId}`);
+      if (exposed && ((parameter.flags & WEBVST_PARAMETER_AUTOMATABLE) === 0 || (parameter.flags & WEBVST_PARAMETER_READ_ONLY) !== 0)) fail(`parameter mismatch for ${expected.classUid}:${parameter.parameterId}`);
     }
   }
   return parsed;

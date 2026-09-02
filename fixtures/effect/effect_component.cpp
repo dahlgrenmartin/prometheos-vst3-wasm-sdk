@@ -5,7 +5,7 @@
 #include <pluginterfaces/base/ibstream.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace {
@@ -38,4 +38,4 @@ tresult PLUGIN_API EffectComponent::process (ProcessData& data) {
   return kResultOk;
 }
 uint32 PLUGIN_API EffectComponent::getTailSamples () { return kNoTail; }
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures

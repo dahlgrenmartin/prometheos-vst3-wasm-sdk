@@ -5,7 +5,7 @@
 #include <cstring>
 #include <pluginterfaces/base/ibstream.h>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace { bool same (const TUID lhs, const TUID rhs) { return FUnknownPrivate::iidEqual (lhs, rhs); } tresult read_value (IBStream* stream, ParamValue& value) { int32 read {}; return stream && stream->read (&value, sizeof value, &read) == kResultOk && read == sizeof value ? kResultOk : kResultFalse; } tresult write_value (IBStream* stream, ParamValue value) { int32 written {}; return stream && stream->write (&value, sizeof value, &written) == kResultOk && written == sizeof value ? kResultOk : kResultFalse; } }
@@ -18,4 +18,4 @@ int32 PLUGIN_API EffectController::getParameterCount () { return 1; }
 tresult PLUGIN_API EffectController::getParameterInfo (int32 index, ParameterInfo& info) { if (index != 0) return kResultFalse; info = {}; info.id = kEffectGainId; info.stepCount = 0; info.defaultNormalizedValue = .25; info.flags = ParameterInfo::kCanAutomate; constexpr TChar title[] = u"Effect Gain"; std::memcpy (info.title, title, sizeof title); return kResultOk; }
 tresult PLUGIN_API EffectController::getParamStringByValue (ParamID id, ParamValue value, String128 text) { if (id != kEffectGainId) return kResultFalse; text[0] = static_cast<TChar> ('0' + static_cast<int> (std::clamp (value, 0., 1.) * 9.)); text[1] = 0; return kResultOk; }
 tresult PLUGIN_API EffectController::getParamValueByString (ParamID, TChar*, ParamValue&) { return kResultFalse; } ParamValue PLUGIN_API EffectController::normalizedParamToPlain (ParamID, ParamValue value) { return value; } ParamValue PLUGIN_API EffectController::plainParamToNormalized (ParamID, ParamValue value) { return value; } ParamValue PLUGIN_API EffectController::getParamNormalized (ParamID id) { return id == kEffectGainId ? gain_ : 0.; } tresult PLUGIN_API EffectController::setParamNormalized (ParamID id, ParamValue value) { if (id != kEffectGainId) return kResultFalse; gain_ = std::clamp (value, 0., 1.); return kResultOk; } tresult PLUGIN_API EffectController::setComponentHandler (IComponentHandler*) { return kResultOk; } IPlugView* PLUGIN_API EffectController::createView (FIDString) { return nullptr; }
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures

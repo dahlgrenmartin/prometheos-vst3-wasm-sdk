@@ -4,7 +4,7 @@
 #include <pluginterfaces/vst/ivstevents.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 
-namespace pvst {
+namespace webvst {
 class FixedEventList final : public Steinberg::Vst::IEventList {
 public:
   bool note (bool on, int32_t pitch, float velocity = 0.f);
@@ -74,4 +74,4 @@ private:
   Steinberg::int32 queue_count_ {};
   Steinberg::int32 point_count_ {};
 };
-} // namespace pvst
+} // namespace webvst

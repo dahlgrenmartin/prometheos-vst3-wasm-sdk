@@ -38,11 +38,11 @@ describe("worklet-facing package consumer", () => {
     try {
       const fixture = await loadFixtureModule({
         schemaVersion: 1,
-        packageId: "com.prometheos.initializer-test",
+        packageId: "org.webvst.initializer-test",
         version: "1.0.0",
-        abi: "prometheos-vst3-wasm-1",
+        abi: "webvst-vst3-wasm-1",
         module: { path: "plugin.wasm", sha256: "0".repeat(64) },
-        classes: [{ classUid: "0".repeat(32), name: "Test", vendor: "Prometheos", kind: "effect", exposedParameters: [] }],
+        classes: [{ classUid: "0".repeat(32), name: "Test", vendor: "WebVST SDK", kind: "effect", exposedParameters: [] }],
       }, new Uint8Array());
       await expect(fixture.create("0".repeat(32), 48_000, 128)).rejects.toThrow("missing ABI export _initialize");
     } finally {

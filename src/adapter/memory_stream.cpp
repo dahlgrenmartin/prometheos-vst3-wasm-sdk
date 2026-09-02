@@ -1,7 +1,7 @@
 #include "memory_stream.h"
 #include <algorithm>
 #include <cstring>
-namespace pvst {
+namespace webvst {
 MemoryStream::MemoryStream (const uint8_t* data, uint32_t size) : bytes_ (data, data + size) {}
 Steinberg::tresult PLUGIN_API MemoryStream::queryInterface (const Steinberg::TUID iid, void** out) { if (!out) return Steinberg::kInvalidArgument; *out = nullptr; if (Steinberg::FUnknownPrivate::iidEqual (iid, INLINE_UID_OF(Steinberg::IBStream)) || Steinberg::FUnknownPrivate::iidEqual (iid, INLINE_UID_OF(Steinberg::FUnknown))) { *out = this; addRef (); return Steinberg::kResultOk; } return Steinberg::kNoInterface; }
 Steinberg::tresult PLUGIN_API MemoryStream::read (void* buffer, Steinberg::int32 count, Steinberg::int32* read) {
@@ -14,4 +14,4 @@ Steinberg::tresult PLUGIN_API MemoryStream::seek (Steinberg::int64 offset, Stein
   Steinberg::int64 base = mode == kIBSeekSet ? 0 : mode == kIBSeekCur ? static_cast<Steinberg::int64> (position_) : mode == kIBSeekEnd ? static_cast<Steinberg::int64> (bytes_.size ()) : -1; if (base < 0 || offset < -base || offset > static_cast<Steinberg::int64> (bytes_.size ()) - base) return Steinberg::kInvalidArgument; position_ = static_cast<size_t> (base + offset); if (result) *result = position_; return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API MemoryStream::tell (Steinberg::int64* position) { if (!position) return Steinberg::kInvalidArgument; *position = position_; return Steinberg::kResultOk; }
-} // namespace pvst
+} // namespace webvst

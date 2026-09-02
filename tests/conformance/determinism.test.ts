@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { loadFixturePackage } from "./fixture_package_harness.js";
 import { rebuildFixturePackage } from "./fixture_build_harness.js";
 
-const packagePath = new URL("../../build/packages/prometheos-fixtures.webvst", import.meta.url);
+const packagePath = new URL("../../build/packages/webvst-fixtures.webvst", import.meta.url);
 
 describe("fixture package determinism", () => {
   it("retains a package build SHA before rebuilding the CMake target", { timeout: 15_000 }, async () => {

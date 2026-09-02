@@ -1,23 +1,27 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
-  PVST_PARAMETER_AUTOMATABLE,
-  PVST_PARAMETER_READ_ONLY,
+  WEBVST_PARAMETER_AUTOMATABLE,
+  WEBVST_PARAMETER_READ_ONLY,
   probeWasm,
 } from "./probe.js";
 import {
+  BUZZ_EXTENSION,
   WEBVST_ABI,
   type AuthorParameterCuration,
-  type BuzzParameter,
+  type BuzzParameterExtension,
   type ManifestAuthorConfig,
   type ProbedParameter,
   type WebVstManifestClass,
   type WebVstManifestV1,
+  type WebVstParameter,
 } from "./types.js";
 
 const PACKAGE_ID = /^(?:[a-z](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$/;
 const CLASS_UID = /^[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+const EXTENSION_NAMESPACE = /^[a-z](?:[a-z0-9-]*[a-z0-9])?$/;
+const UINT32 = 0xffff_ffff;
 const finiteNumber = z.number().finite();
 
 const presentationDisplaySchema = z.object({
@@ -30,22 +34,36 @@ const presentationDisplaySchema = z.object({
 
 const curationSchema = z.object({
   classUid: z.string().regex(CLASS_UID),
-  parameterId: z.number().int().min(0).max(0xffff_ffff),
+  parameterId: z.number().int().min(0).max(UINT32),
   expose: z.boolean().optional(),
-  buzz: z.object({
-    name: z.string().optional(),
-    description: z.string().optional(),
-    display: presentationDisplaySchema.optional(),
-  }).strict().optional(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  display: presentationDisplaySchema.optional(),
 }).strict();
 
 const displaySchema = presentationDisplaySchema.extend({ choices: z.array(z.string()).optional() }).strict();
-const buzzSchema = z.object({
+
+const buzzExtensionSchema = z.object({
   type: z.enum(["note", "switch", "byte", "word"]),
-  name: z.string(), description: z.string(), minValue: finiteNumber, maxValue: finiteNumber,
-  noValue: finiteNumber, defValue: finiteNumber, flags: z.number().int(), display: displaySchema.optional(),
+  minValue: finiteNumber, maxValue: finiteNumber, noValue: finiteNumber, defValue: finiteNumber,
+  flags: z.number().int(),
 }).strict();
-const parameterSchema = z.object({ parameterId: z.number().int().min(0).max(0xffff_ffff), buzz: buzzSchema }).strict();
+
+const extensionsSchema = z.object({ buzz: buzzExtensionSchema.optional() })
+  .catchall(z.record(z.string(), z.unknown()))
+  .refine((value) => Object.keys(value).every((namespace) => EXTENSION_NAMESPACE.test(namespace)),
+    "extension namespaces must be lowercase identifiers");
+
+const parameterSchema = z.object({
+  parameterId: z.number().int().min(0).max(UINT32),
+  name: z.string(),
+  description: z.string(),
+  flags: z.number().int().min(0).max(UINT32),
+  stepCount: z.number().int().min(0).max(UINT32),
+  defaultValue: finiteNumber.min(0).max(1),
+  display: displaySchema.optional(),
+  extensions: extensionsSchema.optional(),
+}).strict();
 const programSchema = z.object({ name: z.string(), artifactId: z.string(), offset: z.number().int().min(0), size: z.number().int().min(0) }).strict();
 const categorySchema = z.object({ name: z.string(), entries: z.array(programSchema) }).strict();
 const programsSchema = z.object({ categories: z.array(categorySchema) }).strict();
@@ -95,23 +113,38 @@ function clampUnit(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function mapParameter(parameter: ProbedParameter): BuzzParameter {
-  const isDiscrete = parameter.stepCount > 0;
-  const maxValue = isDiscrete ? parameter.stepCount : 65534;
-  const type = isDiscrete && parameter.stepCount <= 254 ? "byte" : "word";
-  const noValue = type === "byte" ? 255 : 65535;
-  const buzz: BuzzParameter = {
+/**
+ * Buzz addresses parameters as integers with a reserved "no value" sentinel, so
+ * the normalized ABI value has to be projected onto that model. That projection
+ * is host policy, not part of the plugin contract, which is why it lives under a
+ * namespaced extension instead of the parameter itself.
+ */
+export function buzzProjection(parameter: ProbedParameter): BuzzParameterExtension {
+  const discrete = parameter.stepCount > 0;
+  const maxValue = discrete ? parameter.stepCount : 65_534;
+  const type = discrete && parameter.stepCount <= 254 ? "byte" : "word";
+  return {
     type,
-    name: parameter.title,
-    description: parameter.title,
     minValue: 0,
     maxValue,
-    noValue,
+    noValue: type === "byte" ? 255 : 65_535,
     defValue: Math.round(clampUnit(parameter.defaultValue) * maxValue),
     flags: 1,
   };
-  if (isDiscrete) buzz.display = { choices: parameter.displayValues };
-  return buzz;
+}
+
+export function mapParameter(parameter: ProbedParameter, extensions: readonly string[]): WebVstParameter {
+  const result: WebVstParameter = {
+    parameterId: parameter.parameterId,
+    name: parameter.title,
+    description: parameter.title,
+    flags: parameter.flags,
+    stepCount: parameter.stepCount,
+    defaultValue: clampUnit(parameter.defaultValue),
+  };
+  if (parameter.stepCount > 0) result.display = { choices: parameter.displayValues };
+  if (extensions.includes(BUZZ_EXTENSION)) result.extensions = { [BUZZ_EXTENSION]: buzzProjection(parameter) };
+  return result;
 }
 
 function indexCuration(entries: readonly AuthorParameterCuration[] | undefined): Map<string, AuthorParameterCuration> {
@@ -128,6 +161,7 @@ function applyCuration(
   classes: WebVstManifestClass[],
   probedClasses: Awaited<ReturnType<typeof probeWasm>>,
   curation: readonly AuthorParameterCuration[] | undefined,
+  extensions: readonly string[],
 ): void {
   const entries = indexCuration(curation);
   for (const entry of entries.values()) {
@@ -143,8 +177,8 @@ function applyCuration(
     for (const parameter of probed.parameters) {
       const entry = entries.get(`${probed.classUid}:${parameter.parameterId}`);
       if (!entry) continue;
-      const automatable = (parameter.flags & PVST_PARAMETER_AUTOMATABLE) !== 0;
-      const readOnly = (parameter.flags & PVST_PARAMETER_READ_ONLY) !== 0;
+      const automatable = (parameter.flags & WEBVST_PARAMETER_AUTOMATABLE) !== 0;
+      const readOnly = (parameter.flags & WEBVST_PARAMETER_READ_ONLY) !== 0;
       if (entry.expose === true && (!automatable || readOnly)) {
         fail(`curation cannot expose non-automatable or read-only parameter ${probed.classUid}:${parameter.parameterId}`);
       }
@@ -155,16 +189,16 @@ function applyCuration(
       const target = exposed.get(parameter.parameterId);
       if (!target) {
         if (entry.expose !== true) fail(`curation override targets a parameter that is not exposed by ABI defaults: ${probed.classUid}:${parameter.parameterId}`);
-        exposed.set(parameter.parameterId, { parameterId: parameter.parameterId, buzz: mapParameter(parameter) });
+        exposed.set(parameter.parameterId, mapParameter(parameter, extensions));
       }
       const selected = exposed.get(parameter.parameterId)!;
-      if (entry.buzz?.name !== undefined) selected.buzz.name = entry.buzz.name;
-      if (entry.buzz?.description !== undefined) selected.buzz.description = entry.buzz.description;
-      if (entry.buzz?.display) {
-        selected.buzz.display = {
-          ...selected.buzz.display,
-          ...entry.buzz.display,
-          ...(selected.buzz.display?.choices ? { choices: selected.buzz.display.choices } : {}),
+      if (entry.name !== undefined) selected.name = entry.name;
+      if (entry.description !== undefined) selected.description = entry.description;
+      if (entry.display) {
+        selected.display = {
+          ...selected.display,
+          ...entry.display,
+          ...(selected.display?.choices ? { choices: selected.display.choices } : {}),
         };
       }
     }
@@ -178,6 +212,11 @@ export async function generateManifest(config: ManifestAuthorConfig): Promise<We
   if (!config.modulePath || config.modulePath.includes("\\") || config.modulePath.startsWith("/") || config.modulePath.split("/").includes("..")) {
     fail("modulePath must be a safe relative POSIX path");
   }
+  const extensions = config.extensions ?? [BUZZ_EXTENSION];
+  for (const namespace of extensions) {
+    if (!EXTENSION_NAMESPACE.test(namespace)) fail(`invalid extension namespace ${namespace}`);
+    if (namespace !== BUZZ_EXTENSION) fail(`unknown extension namespace ${namespace}`);
+  }
   const curation = validCuration(config.curation);
   const probedClasses = await probeWasm(config.wasm);
   const classes: WebVstManifestClass[] = probedClasses.map((probed) => ({
@@ -186,10 +225,10 @@ export async function generateManifest(config: ManifestAuthorConfig): Promise<We
     vendor: probed.vendor,
     kind: probed.kind,
     exposedParameters: probed.parameters
-      .filter((parameter) => (parameter.flags & PVST_PARAMETER_AUTOMATABLE) !== 0 && (parameter.flags & PVST_PARAMETER_READ_ONLY) === 0)
-      .map((parameter) => ({ parameterId: parameter.parameterId, buzz: mapParameter(parameter) })),
+      .filter((parameter) => (parameter.flags & WEBVST_PARAMETER_AUTOMATABLE) !== 0 && (parameter.flags & WEBVST_PARAMETER_READ_ONLY) === 0)
+      .map((parameter) => mapParameter(parameter, extensions)),
   }));
-  applyCuration(classes, probedClasses, curation);
+  applyCuration(classes, probedClasses, curation, extensions);
   return validateManifest({
     schemaVersion: 1,
     packageId: config.packageId,

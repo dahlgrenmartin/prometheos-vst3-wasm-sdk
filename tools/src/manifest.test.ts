@@ -55,32 +55,32 @@ function installWasmProbe(classes: Class[], imports: WebAssembly.ModuleImportDes
       return allocation;
     },
     free: () => undefined,
-    pvst_abi_version: () => 1,
-    pvst_class_count: () => classes.length,
-    pvst_class_uid_size: (classIndex: number) => classes[classIndex]?.uid.length ?? 0,
-    pvst_class_uid_write: writeClassString((classIndex) => classes[classIndex]?.uid ?? ""),
-    pvst_class_name_size: (classIndex: number) => classes[classIndex]?.name.length ?? 0,
-    pvst_class_name_write: writeClassString((classIndex) => classes[classIndex]?.name ?? ""),
-    pvst_class_vendor_size: (classIndex: number) => classes[classIndex]?.vendor.length ?? 0,
-    pvst_class_vendor_write: writeClassString((classIndex) => classes[classIndex]?.vendor ?? ""),
-    pvst_class_kind: (classIndex: number) => classes[classIndex]?.kind ?? 0,
-    pvst_class_param_count: (classIndex: number) => classes[classIndex]?.parameters.length ?? 0,
-    pvst_class_param_id: (classIndex: number, parameterIndex: number) =>
+    webvst_abi_version: () => 1,
+    webvst_class_count: () => classes.length,
+    webvst_class_uid_size: (classIndex: number) => classes[classIndex]?.uid.length ?? 0,
+    webvst_class_uid_write: writeClassString((classIndex) => classes[classIndex]?.uid ?? ""),
+    webvst_class_name_size: (classIndex: number) => classes[classIndex]?.name.length ?? 0,
+    webvst_class_name_write: writeClassString((classIndex) => classes[classIndex]?.name ?? ""),
+    webvst_class_vendor_size: (classIndex: number) => classes[classIndex]?.vendor.length ?? 0,
+    webvst_class_vendor_write: writeClassString((classIndex) => classes[classIndex]?.vendor ?? ""),
+    webvst_class_kind: (classIndex: number) => classes[classIndex]?.kind ?? 0,
+    webvst_class_param_count: (classIndex: number) => classes[classIndex]?.parameters.length ?? 0,
+    webvst_class_param_id: (classIndex: number, parameterIndex: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.id ?? 0,
-    pvst_class_param_flags: (classIndex: number, parameterIndex: number) =>
+    webvst_class_param_flags: (classIndex: number, parameterIndex: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.flags ?? 0,
-    pvst_class_param_step_count: (classIndex: number, parameterIndex: number) =>
+    webvst_class_param_step_count: (classIndex: number, parameterIndex: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.steps ?? 0,
-    pvst_class_param_default: (classIndex: number, parameterIndex: number) =>
+    webvst_class_param_default: (classIndex: number, parameterIndex: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.defaultValue ?? 0,
-    pvst_class_param_title_size: (classIndex: number, parameterIndex: number) =>
+    webvst_class_param_title_size: (classIndex: number, parameterIndex: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.title.length ?? 0,
-    pvst_class_param_title_write: writeParameterString(
+    webvst_class_param_title_write: writeParameterString(
       (classIndex, parameterIndex) => classes[classIndex]?.parameters[parameterIndex]?.title ?? "",
     ),
-    pvst_class_param_value_text_size: (classIndex: number, parameterIndex: number, normalized: number) =>
+    webvst_class_param_value_text_size: (classIndex: number, parameterIndex: number, normalized: number) =>
       classes[classIndex]?.parameters[parameterIndex]?.labels?.[Math.round(normalized * (classes[classIndex]?.parameters[parameterIndex]?.steps ?? 0))]?.length ?? 0,
-    pvst_class_param_value_text_write: (classIndex: number, parameterIndex: number, normalized: number, pointer: number, capacity: number) => {
+    webvst_class_param_value_text_write: (classIndex: number, parameterIndex: number, normalized: number, pointer: number, capacity: number) => {
       const parameter = classes[classIndex]?.parameters[parameterIndex];
       const value = parameter?.labels?.[Math.round(normalized * (parameter.steps ?? 0))] ?? "";
       if (capacity < value.length) return -6;
@@ -138,11 +138,11 @@ function standaloneProbeWasm(): Uint8Array {
   const globals = section(6, vector([[0x7f, 1, ...i32const(0), 0x0b]]));
   const exports = [
     ["memory", 2, 0], ["_initialize", 0, 1], ["malloc", 0, 2], ["free", 0, 3],
-    ["pvst_abi_version", 0, 4], ["pvst_class_count", 0, 5], ["pvst_class_uid_size", 0, 6], ["pvst_class_uid_write", 0, 7],
-    ["pvst_class_name_size", 0, 8], ["pvst_class_name_write", 0, 9], ["pvst_class_vendor_size", 0, 10], ["pvst_class_vendor_write", 0, 11],
-    ["pvst_class_kind", 0, 12], ["pvst_class_param_count", 0, 13], ["pvst_class_param_id", 0, 14],
-    ["pvst_class_param_flags", 0, 15], ["pvst_class_param_step_count", 0, 16], ["pvst_class_param_default", 0, 17],
-    ["pvst_class_param_title_size", 0, 18],
+    ["webvst_abi_version", 0, 4], ["webvst_class_count", 0, 5], ["webvst_class_uid_size", 0, 6], ["webvst_class_uid_write", 0, 7],
+    ["webvst_class_name_size", 0, 8], ["webvst_class_name_write", 0, 9], ["webvst_class_vendor_size", 0, 10], ["webvst_class_vendor_write", 0, 11],
+    ["webvst_class_kind", 0, 12], ["webvst_class_param_count", 0, 13], ["webvst_class_param_id", 0, 14],
+    ["webvst_class_param_flags", 0, 15], ["webvst_class_param_step_count", 0, 16], ["webvst_class_param_default", 0, 17],
+    ["webvst_class_param_title_size", 0, 18],
   ].map(([label, kind, index]) => [...name(label as string), kind as number, ...u32(index as number)]);
   const exportSection = section(7, vector(exports));
   const code = section(10, vector([
@@ -159,14 +159,14 @@ const twoClasses: Class[] = [
   {
     uid: canonicalInstrument,
     name: "Fixture Synth",
-    vendor: "Prometheos",
+    vendor: "WebVST SDK",
     kind: 1,
     parameters: [{ id: 0x1001, flags: 1, steps: 0, defaultValue: 1, title: "Gain" }],
   },
   {
     uid: canonicalEffect,
     name: "Fixture Effect",
-    vendor: "Prometheos",
+    vendor: "WebVST SDK",
     kind: 0,
     parameters: [{ id: 0x2001, flags: 1, steps: 2, defaultValue: 0.5, title: "Mode", labels: ["Off", "Half", "Full"] }],
   },
@@ -180,19 +180,19 @@ describe("generateManifest", () => {
 
     const manifest = await generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
     });
 
     expect(manifest).toMatchObject({
       schemaVersion: 1,
-      packageId: "org.prometheos.fixtures",
-      abi: "prometheos-vst3-wasm-1",
+      packageId: "org.webvst.fixtures",
+      abi: "webvst-vst3-wasm-1",
       module: { path: "plugin.wasm", sha256: createHash("sha256").update(wasmBytes).digest("hex") },
       classes: [
-        { classUid: canonicalInstrument, kind: "instrument", exposedParameters: [{ parameterId: 0x1001, buzz: { type: "word", maxValue: 65534, defValue: 65534 } }] },
-        { classUid: canonicalEffect, kind: "effect", exposedParameters: [{ parameterId: 0x2001, buzz: { type: "byte", maxValue: 2, defValue: 1, display: { choices: ["Off", "Half", "Full"] } } }] },
+        { classUid: canonicalInstrument, kind: "instrument", exposedParameters: [{ parameterId: 0x1001, stepCount: 0, defaultValue: 1, extensions: { buzz: { type: "word", maxValue: 65534, defValue: 65534 } } }] },
+        { classUid: canonicalEffect, kind: "effect", exposedParameters: [{ parameterId: 0x2001, stepCount: 2, display: { choices: ["Off", "Half", "Full"] }, extensions: { buzz: { type: "byte", maxValue: 2, defValue: 1 } } }] },
       ],
     });
   });
@@ -200,14 +200,14 @@ describe("generateManifest", () => {
   it("rejects duplicate class UIDs before manifest emission", async () => {
     installWasmProbe([{ ...twoClasses[0] }, { ...twoClasses[0], name: "Other" }]);
 
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("duplicate class UID");
   });
 
   it("rejects duplicate parameter IDs in a class before manifest emission", async () => {
     installWasmProbe([{ ...twoClasses[0], parameters: [twoClasses[0].parameters[0], { ...twoClasses[0].parameters[0], title: "Duplicate" }] }]);
 
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("duplicate parameter ID");
   });
 
@@ -221,14 +221,14 @@ describe("generateManifest", () => {
   it("rejects modules whose imports fall outside the ABI environment", async () => {
     installWasmProbe(twoClasses, [{ module: "env", name: "TextEncoder", kind: "function" }]);
 
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("unsupported WASM import env.TextEncoder");
   });
 
   it("rejects noncanonical VST3 class UIDs", async () => {
     installWasmProbe([{ ...twoClasses[0], uid: twoClasses[0].uid.toUpperCase() }]);
 
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("canonical");
   });
 
@@ -237,7 +237,7 @@ describe("generateManifest", () => {
 
     await expect(generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
       curation: [{ classUid: canonicalInstrument, parameterId: 99, expose: true }],
@@ -268,10 +268,10 @@ describe("generateManifest", () => {
 
     await expect(generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
-      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, buzz: { maxValue: 1, defValue: 0, flags: 0, type: "byte" } }],
+      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, maxValue: 1, defValue: 0, flags: 0, type: "byte" }],
     } as never)).rejects.toThrow("curation");
   });
 
@@ -280,10 +280,10 @@ describe("generateManifest", () => {
 
     await expect(generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
-      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, expose: "yes", buzz: { display: { choices: ["forged"] } } }],
+      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, expose: "yes", display: { choices: ["forged"] } }],
     } as never)).rejects.toThrow("curation");
   });
 
@@ -291,7 +291,7 @@ describe("generateManifest", () => {
     for (const id of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 0x1_0000_0000]) {
       await expect(generateManifest({
         wasm: wasmBytes,
-        packageId: "org.prometheos.fixtures",
+        packageId: "org.webvst.fixtures",
         version: "1.0.0",
         modulePath: "plugin.wasm",
         curation: [{ classUid: canonicalInstrument, parameterId: id }],
@@ -303,7 +303,7 @@ describe("generateManifest", () => {
   it("rejects negative author parameter IDs without reinterpreting them", async () => {
     await expect(generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
       curation: [{ classUid: canonicalInstrument, parameterId: -1 }],
@@ -316,64 +316,64 @@ describe("generateManifest", () => {
       { ...twoClasses[0].parameters[0], id: 2, steps: 255, labels: Array.from({ length: 256 }, (_, index) => `${index}`) },
     ] }]);
 
-    const manifest = await generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" });
+    const manifest = await generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" });
 
-    expect(manifest.classes[0].exposedParameters.map((entry) => entry.buzz.type)).toEqual(["byte", "word"]);
+    expect(manifest.classes[0].exposedParameters.map((entry) => entry.extensions?.buzz?.type)).toEqual(["byte", "word"]);
   });
 
   it("filters read-only controls even if they are automatable", async () => {
     installWasmProbe([{ ...twoClasses[0], parameters: [{ ...twoClasses[0].parameters[0], flags: 3 }] }]);
 
-    const manifest = await generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" });
+    const manifest = await generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" });
 
     expect(manifest.classes[0].exposedParameters).toEqual([]);
   });
 
   it("rejects oversized discrete steps and invalid normalized defaults", async () => {
     installWasmProbe([{ ...twoClasses[0], parameters: [{ ...twoClasses[0].parameters[0], steps: 65535 }] }]);
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("unsupported step count");
 
     vi.restoreAllMocks();
     installWasmProbe([{ ...twoClasses[0], parameters: [{ ...twoClasses[0].parameters[0], defaultValue: Number.NaN }] }]);
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("default");
   });
 
   it("rejects ABI writes, invalid UTF-8, oversized strings, and out-of-bounds allocations", async () => {
     const writeFailure = installWasmProbe(twoClasses);
-    (writeFailure.pvst_class_uid_write as (...args: number[]) => number) = () => -5;
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    (writeFailure.webvst_class_uid_write as (...args: number[]) => number) = () => -5;
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("ABI write");
 
     vi.restoreAllMocks();
     installWasmProbe([{ ...twoClasses[0], uid: `${String.fromCharCode(255)}${"0".repeat(31)}` }]);
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("UTF-8");
 
     vi.restoreAllMocks();
     const oversized = installWasmProbe(twoClasses);
-    oversized.pvst_class_uid_size = () => 1_048_577;
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    oversized.webvst_class_uid_size = () => 1_048_577;
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("maximum");
 
     vi.restoreAllMocks();
     const outOfBounds = installWasmProbe(twoClasses);
     outOfBounds.malloc = () => 65_535;
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("memory bounds");
   });
 
   it("caps ABI-controlled class and parameter counts", async () => {
     const tooManyClasses = installWasmProbe(twoClasses);
-    tooManyClasses.pvst_class_count = () => 1_025;
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    tooManyClasses.webvst_class_count = () => 1_025;
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("class count exceeds");
 
     vi.restoreAllMocks();
     const tooManyParameters = installWasmProbe(twoClasses);
-    tooManyParameters.pvst_class_param_count = () => 4_097;
-    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.prometheos.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
+    tooManyParameters.webvst_class_param_count = () => 4_097;
+    await expect(generateManifest({ wasm: wasmBytes, packageId: "org.webvst.fixtures", version: "1.0.0", modulePath: "plugin.wasm" }))
       .rejects.toThrow("parameter count exceeds");
   });
 
@@ -382,24 +382,24 @@ describe("generateManifest", () => {
 
     const manifest = await generateManifest({
       wasm: wasmBytes,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
       modulePath: "plugin.wasm",
-      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, buzz: { name: "Loudness", description: "Output loudness", display: { unit: "dB", precision: 1 } } }],
+      curation: [{ classUid: canonicalInstrument, parameterId: 0x1001, name: "Loudness", description: "Output loudness", display: { unit: "dB", precision: 1 } }],
     });
 
-    expect(manifest.classes[0].exposedParameters[0].buzz).toMatchObject({
-      type: "word", minValue: 0, maxValue: 65534, noValue: 65535, defValue: 65534, flags: 1,
+    expect(manifest.classes[0].exposedParameters[0]).toMatchObject({
       name: "Loudness", description: "Output loudness", display: { unit: "dB", precision: 1 },
+      extensions: { buzz: { type: "word", minValue: 0, maxValue: 65534, noValue: 65535, defValue: 65534, flags: 1 } },
     });
   });
 
   it("rejects malformed final manifest objects through the strict schema", () => {
     expect(() => validateManifest({
       schemaVersion: 1,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
-      abi: "prometheos-vst3-wasm-1",
+      abi: "webvst-vst3-wasm-1",
       module: { path: "plugin.wasm", sha256: "0".repeat(64), unexpected: true },
       classes: [],
     })).toThrow("strict schema");
@@ -408,13 +408,13 @@ describe("generateManifest", () => {
   it("rejects duplicate class UIDs and artifact IDs in hand-authored manifests", () => {
     const base = {
       schemaVersion: 1,
-      packageId: "org.prometheos.fixtures",
+      packageId: "org.webvst.fixtures",
       version: "1.0.0",
-      abi: "prometheos-vst3-wasm-1",
+      abi: "webvst-vst3-wasm-1",
       module: { path: "plugin.wasm", sha256: "0".repeat(64) },
       classes: [
-        { classUid: canonicalInstrument, name: "First", vendor: "Prometheos", kind: "instrument", exposedParameters: [] },
-        { classUid: canonicalInstrument, name: "Second", vendor: "Prometheos", kind: "effect", exposedParameters: [] },
+        { classUid: canonicalInstrument, name: "First", vendor: "WebVST SDK", kind: "instrument", exposedParameters: [] },
+        { classUid: canonicalInstrument, name: "Second", vendor: "WebVST SDK", kind: "effect", exposedParameters: [] },
       ],
       artifacts: [
         { id: "preset", path: "presets/one.bin", sha256: "1".repeat(64), role: "preset" },

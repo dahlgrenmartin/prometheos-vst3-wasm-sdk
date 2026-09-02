@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prometheos.dev/schema/webvst/plugin-v1.json",
+  "$id": "urn:webvst:schema:plugin-v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "packageId", "version", "abi", "module", "classes"],
@@ -8,7 +8,7 @@
     "schemaVersion": { "const": 1 },
     "packageId": { "type": "string", "pattern": "^(?:[a-z](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?$" },
     "version": { "type": "string", "minLength": 1 },
-    "abi": { "const": "prometheos-vst3-wasm-1" },
+    "abi": { "const": "webvst-vst3-wasm-1" },
     "module": { "$ref": "#/$defs/module" },
     "classes": { "type": "array", "items": { "$ref": "#/$defs/class" } },
     "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
@@ -33,16 +33,15 @@
     },
     "exposedParameter": {
       "type": "object", "additionalProperties": false,
-      "required": ["parameterId", "buzz"],
-      "properties": { "parameterId": { "type": "integer", "minimum": 0, "maximum": 4294967295 }, "buzz": { "$ref": "#/$defs/buzzParameter" } }
-    },
-    "buzzParameter": {
-      "type": "object", "additionalProperties": false,
-      "required": ["type", "name", "description", "minValue", "maxValue", "noValue", "defValue", "flags"],
+      "required": ["parameterId", "name", "description", "flags", "stepCount", "defaultValue"],
       "properties": {
-        "type": { "enum": ["note", "switch", "byte", "word"] }, "name": { "type": "string" }, "description": { "type": "string" },
-        "minValue": { "type": "number" }, "maxValue": { "type": "number" }, "noValue": { "type": "number" }, "defValue": { "type": "number" }, "flags": { "type": "integer" },
-        "display": { "$ref": "#/$defs/display" }
+        "parameterId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "name": { "type": "string" }, "description": { "type": "string" },
+        "flags": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "stepCount": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "defaultValue": { "type": "number", "minimum": 0, "maximum": 1 },
+        "display": { "$ref": "#/$defs/display" },
+        "extensions": { "$ref": "#/$defs/extensions" }
       }
     },
     "display": {
@@ -50,6 +49,21 @@
       "properties": {
         "unit": { "enum": ["%", "Hz", "ms", "dB", "ticks"] }, "min": { "type": "number" }, "max": { "type": "number" },
         "precision": { "type": "integer", "minimum": 0 }, "curve": { "enum": ["linear", "exp"] }, "choices": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z](?:[a-z0-9-]*[a-z0-9])?$" },
+      "additionalProperties": { "type": "object" },
+      "properties": { "buzz": { "$ref": "#/$defs/buzzParameter" } }
+    },
+    "buzzParameter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "minValue", "maxValue", "noValue", "defValue", "flags"],
+      "properties": {
+        "type": { "enum": ["note", "switch", "byte", "word"] },
+        "minValue": { "type": "number" }, "maxValue": { "type": "number" }, "noValue": { "type": "number" },
+        "defValue": { "type": "number" }, "flags": { "type": "integer" }
       }
     },
     "programs": {

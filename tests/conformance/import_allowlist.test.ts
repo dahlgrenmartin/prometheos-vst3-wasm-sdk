@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ALLOWED_WASM_IMPORTS } from "./package_consumer.js";
 import { loadFixturePackage } from "./fixture_package_harness.js";
 
-const packagePath = new URL("../../build/packages/prometheos-fixtures.webvst", import.meta.url);
+const packagePath = new URL("../../build/packages/webvst-fixtures.webvst", import.meta.url);
 
 describe("fixture WASM imports", () => {
   it("uses only the documented AudioWorklet-compatible imports", async () => {

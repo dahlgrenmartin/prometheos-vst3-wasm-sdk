@@ -1,8 +1,8 @@
-# Prometheos VST3 WASM SDK
+# WebVST VST3 WASM SDK
 
-This repository publishes the Prometheos WebVST ABI v1 adapter, package schema,
+This repository publishes the WebVST ABI v1 adapter, package schema,
 TypeScript packer/prober, and reproducible build instructions. The public
-contract is immutable at ABI string `prometheos-vst3-wasm-1`; read
+contract is immutable at ABI string `webvst-vst3-wasm-1`; read
 [docs/abi-v1.md](docs/abi-v1.md) and [docs/package-format-v1.md](docs/package-format-v1.md)
 before implementing a plugin.
 
@@ -28,11 +28,11 @@ EMSCRIPTEN_TOOLCHAIN="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscript
 cmake -S . -B build/wasm -G Ninja \
   -DCMAKE_MAKE_PROGRAM="$NINJA_BIN" \
   -DCMAKE_TOOLCHAIN_FILE="$EMSCRIPTEN_TOOLCHAIN" \
-  -DPVST_BUILD_FIXTURES=ON
+  -DWEBVST_BUILD_FIXTURES=ON
 cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package
 ```
 
-The generated packages are `build/packages/prometheos-fixtures.webvst` and
+The generated packages are `build/packages/webvst-fixtures.webvst` and
 `build/packages/steinberg-adelay.webvst`. The latter compiles the pinned,
 untouched Steinberg ADelay VST3 processor, controller, and factory sources
 through the generic adapter; the same sources also build as the native

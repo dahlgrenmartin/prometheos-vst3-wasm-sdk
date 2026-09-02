@@ -2,7 +2,7 @@
 
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 class EffectController final : public Steinberg::Vst::IEditController {
 public:
   static Steinberg::FUnknown* create_instance (void*);
@@ -28,4 +28,4 @@ private:
   Steinberg::uint32 refs_ {1};
   Steinberg::Vst::ParamValue gain_ {.25};
 };
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures
