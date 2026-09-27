@@ -68,38 +68,38 @@ export async function loadFixtureModule(manifest: WebVstManifestV1, wasm: Uint8A
       const malloc = allocator(exports, "malloc");
       const free = allocator(exports, "free");
       const call = (name: string) => required(exports, name);
-      const handle = call("pvst_create")(classIndex, sampleRate, maxFrames) >>> 0;
+      const handle = call("webvst_create")(classIndex, sampleRate, maxFrames) >>> 0;
       if (!handle) fail(`could not create fixture class ${classUid}`);
 
       return {
         memory,
         wasmInstance,
-        destroy() { call("pvst_destroy")(handle); },
-        getParameter(parameterId) { return call("pvst_param_get")(handle, parameterId); },
-        setParameter(parameterId, value) { return call("pvst_param_set")(handle, parameterId, value); },
-        noteOn(note, velocity) { return call("pvst_note_on")(handle, note, velocity); },
-        noteOff(note) { return call("pvst_note_off")(handle, note); },
+        destroy() { call("webvst_destroy")(handle); },
+        getParameter(parameterId) { return call("webvst_param_get")(handle, parameterId); },
+        setParameter(parameterId, value) { return call("webvst_param_set")(handle, parameterId, value); },
+        noteOn(note, velocity) { return call("webvst_note_on")(handle, note, velocity); },
+        noteOff(note) { return call("webvst_note_off")(handle, note); },
         process(input, output, frames) {
           if (frames < 0 || frames > maxFrames || output.length < frames * 2 || (input && input.length < frames * 2)) fail("invalid process buffer");
           const inputPointer = input ? copyToMemory(memory, malloc, new Uint8Array(input.buffer, input.byteOffset, frames * 8)) : 0;
           const outputPointer = copyToMemory(memory, malloc, new Uint8Array(frames * 8));
           try {
-            const result = call("pvst_process")(handle, inputPointer, outputPointer, frames);
+            const result = call("webvst_process")(handle, inputPointer, outputPointer, frames);
             output.set(new Float32Array(memory.buffer, outputPointer, frames * 2));
             return result;
           } finally { if (inputPointer) free(inputPointer); free(outputPointer); }
         },
         saveState() {
-          const size = call("pvst_state_size")(handle) >>> 0;
+          const size = call("webvst_state_size")(handle) >>> 0;
           const pointer = copyToMemory(memory, malloc, new Uint8Array(size));
           try {
-            if (call("pvst_state_write")(handle, pointer, size) !== 0) fail("could not write state");
+            if (call("webvst_state_write")(handle, pointer, size) !== 0) fail("could not write state");
             return new Uint8Array(memory.buffer, pointer, size).slice();
           } finally { free(pointer); }
         },
         loadState(state) {
           const pointer = copyToMemory(memory, malloc, state);
-          try { return call("pvst_state_load")(handle, pointer, state.byteLength); }
+          try { return call("webvst_state_load")(handle, pointer, state.byteLength); }
           finally { free(pointer); }
         },
       };

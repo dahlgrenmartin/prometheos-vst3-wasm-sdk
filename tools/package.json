@@ -1,5 +1,5 @@
 {
-  "name": "@prometheos/webvst-tools",
+  "name": "webvst-tools",
   "private": true,
   "type": "module",
   "bin": {

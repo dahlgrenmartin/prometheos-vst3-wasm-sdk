@@ -3,12 +3,12 @@
 #include <array>
 #include <memory>
 #include <vector>
-#include <prometheos/webvst.h>
+#include <webvst/webvst.h>
 #include <pluginterfaces/vst/ivstaudioprocessor.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivsthostapplication.h>
-namespace pvst {
+namespace webvst {
 class Vst3Instance {
 public:
   static std::unique_ptr<Vst3Instance> create (const Steinberg::TUID class_id, double sample_rate, uint32_t max_frames);
@@ -29,4 +29,4 @@ private:
   HostApplication host_; Steinberg::Vst::IComponent* component_ {nullptr}; Steinberg::Vst::IAudioProcessor* processor_ {nullptr}; Steinberg::Vst::IEditController* controller_ {nullptr}; Steinberg::Vst::IConnectionPoint* component_connection_ {nullptr}; Steinberg::Vst::IConnectionPoint* controller_connection_ {nullptr};
   std::array<float, 128> silence_ {}; std::array<float, 128> input_left_ {}, input_right_ {}, output_left_ {}, output_right_ {}; std::array<Steinberg::Vst::Sample32*, 2> input_channels_ {}; std::array<Steinberg::Vst::Sample32*, 2> output_channels_ {}; std::array<Steinberg::Vst::AudioBusBuffers, 1> input_buses_ {}; std::array<Steinberg::Vst::AudioBusBuffers, 1> output_buses_ {}; FixedEventList events_; FixedParameterChanges parameters_; uint32_t max_frames_ {0}; bool has_input_ {false}, component_initialized_ {false}, controller_initialized_ {false}, combined_controller_ {false}, input_active_ {false}, output_active_ {false}, component_active_ {false}, processing_ {false}, connected_component_ {false}, connected_controller_ {false};
 };
-} // namespace pvst
+} // namespace webvst

@@ -4,7 +4,7 @@
 #include <vector>
 #include <pluginterfaces/base/ibstream.h>
 
-namespace pvst {
+namespace webvst {
 class MemoryStream final : public Steinberg::IBStream {
 public:
   MemoryStream () = default;
@@ -21,4 +21,4 @@ public:
 private:
   Steinberg::uint32 refs_ {1}; std::vector<uint8_t> bytes_; size_t position_ {0};
 };
-} // namespace pvst
+} // namespace webvst

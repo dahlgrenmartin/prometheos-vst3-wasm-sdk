@@ -2,8 +2,8 @@
 #include "vst3_instance.h"
 #include <array>
 #include <memory>
-#include <prometheos/webvst.h>
-namespace pvst {
+#include <webvst/webvst.h>
+namespace webvst {
 class Adapter {
 public:
   uint32_t class_count () const; uint32_t class_uid_size (uint32_t index) const; int32_t class_uid_write (uint32_t index, char* dst, uint32_t capacity) const; uint32_t class_name_size (uint32_t index) const; int32_t class_name_write (uint32_t index, char* dst, uint32_t capacity) const; uint32_t class_vendor_size (uint32_t index) const; int32_t class_vendor_write (uint32_t index, char* dst, uint32_t capacity) const; uint32_t class_kind (uint32_t index) const;
@@ -13,4 +13,4 @@ private:
   struct Slot { uint16_t generation {1}; std::unique_ptr<Vst3Instance> instance; }; static constexpr size_t kSlots = 32; Vst3Instance* instance (uint32_t handle) const; bool class_id (uint32_t visible_index, Steinberg::TUID id) const; bool parameter_info (uint32_t index, uint32_t parameter, Steinberg::Vst::ParameterInfo& info) const; std::array<Slot, kSlots> slots_ {};
 };
 Adapter& adapter ();
-} // namespace pvst
+} // namespace webvst

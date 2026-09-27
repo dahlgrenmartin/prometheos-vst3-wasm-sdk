@@ -11,9 +11,9 @@ export const ALLOWED_WASM_IMPORTS = new Set([
   "wasi_snapshot_preview1.random_get",
 ]);
 
-const PVST_OK = 0;
-const PVST_PARAMETER_AUTOMATABLE = 1;
-const PVST_PARAMETER_READ_ONLY = 2;
+const WEBVST_OK = 0;
+const WEBVST_PARAMETER_AUTOMATABLE = 1;
+const WEBVST_PARAMETER_READ_ONLY = 2;
 const ENVIRONMENT_BYTES = new Uint8Array([80, 65, 84, 72, 61, 47, 117, 115, 114, 47, 98, 105, 110, 0]);
 const MAX_CLASS_COUNT = 1_024;
 const MAX_PARAMETER_COUNT = 4_096;
@@ -115,7 +115,7 @@ function readAbiString(
   try {
     if (pointer > memory.buffer.byteLength || size > memory.buffer.byteLength - pointer) fail(`${label} allocation exceeds memory bounds`);
     const result = write(pointer, size);
-    if (result !== PVST_OK) fail(`ABI write for ${label} failed with ${result}`);
+    if (result !== WEBVST_OK) fail(`ABI write for ${label} failed with ${result}`);
     if (pointer > memory.buffer.byteLength || size > memory.buffer.byteLength - pointer) fail(`${label} write exceeds memory bounds`);
     try {
       return readUtf8(new Uint8Array(memory.buffer, pointer, size));
@@ -136,22 +136,22 @@ function probeParameter(
   parameterIndex: number,
 ): ProbedParameter {
   const call = (name: string) => requiredFunction(exports, name);
-  const parameterId = abiU32(call("pvst_class_param_id")(classIndex, parameterIndex), "parameter ID");
-  const flags = abiU32(call("pvst_class_param_flags")(classIndex, parameterIndex), `parameter ${parameterId} flags`);
-  const stepCount = abiU32(call("pvst_class_param_step_count")(classIndex, parameterIndex), `parameter ${parameterId} step count`);
+  const parameterId = abiU32(call("webvst_class_param_id")(classIndex, parameterIndex), "parameter ID");
+  const flags = abiU32(call("webvst_class_param_flags")(classIndex, parameterIndex), `parameter ${parameterId} flags`);
+  const stepCount = abiU32(call("webvst_class_param_step_count")(classIndex, parameterIndex), `parameter ${parameterId} step count`);
   if (stepCount > 65534) fail(`parameter ${parameterId} has unsupported step count ${stepCount}`);
-  const defaultValue = finiteNormalized(call("pvst_class_param_default")(classIndex, parameterIndex), `parameter ${parameterId} default`);
-  const titleSize = abiU32(call("pvst_class_param_title_size")(classIndex, parameterIndex), `parameter ${parameterId} title size`);
+  const defaultValue = finiteNormalized(call("webvst_class_param_default")(classIndex, parameterIndex), `parameter ${parameterId} default`);
+  const titleSize = abiU32(call("webvst_class_param_title_size")(classIndex, parameterIndex), `parameter ${parameterId} title size`);
   const title = readAbiString(memory, malloc, free, titleSize,
-    (pointer, capacity) => call("pvst_class_param_title_write")(classIndex, parameterIndex, pointer, capacity),
+    (pointer, capacity) => call("webvst_class_param_title_write")(classIndex, parameterIndex, pointer, capacity),
     `parameter ${parameterId} title`);
   const displayValues: string[] = [];
   if (stepCount > 0) {
     for (let value = 0; value <= stepCount; value += 1) {
       const normalized = value / stepCount;
-      const size = abiU32(call("pvst_class_param_value_text_size")(classIndex, parameterIndex, normalized), `parameter ${parameterId} display value ${value} size`);
+      const size = abiU32(call("webvst_class_param_value_text_size")(classIndex, parameterIndex, normalized), `parameter ${parameterId} display value ${value} size`);
       displayValues.push(readAbiString(memory, malloc, free, size,
-        (pointer, capacity) => call("pvst_class_param_value_text_write")(classIndex, parameterIndex, normalized, pointer, capacity),
+        (pointer, capacity) => call("webvst_class_param_value_text_write")(classIndex, parameterIndex, normalized, pointer, capacity),
         `parameter ${parameterId} display value ${value}`));
     }
   }
@@ -171,24 +171,24 @@ export async function probeWasm(wasm: Uint8Array): Promise<ProbedClass[]> {
   const memory = exports.memory;
   environment.bindMemory(memory);
   requiredFunction(exports, "_initialize")();
-  if (abiU32(requiredFunction(exports, "pvst_abi_version")(), "ABI version") !== 1) fail("ABI version is not 1");
+  if (abiU32(requiredFunction(exports, "webvst_abi_version")(), "ABI version") !== 1) fail("ABI version is not 1");
   const malloc = allocatorFunction(exports, "malloc");
   const free = allocatorFunction(exports, "free");
-  const count = abiU32(requiredFunction(exports, "pvst_class_count")(), "class count");
+  const count = abiU32(requiredFunction(exports, "webvst_class_count")(), "class count");
   if (count > MAX_CLASS_COUNT) fail(`class count exceeds the maximum ${MAX_CLASS_COUNT}`);
   const classes: ProbedClass[] = [];
   const classUids = new Set<string>();
   for (let classIndex = 0; classIndex < count; classIndex += 1) {
     const call = (name: string) => requiredFunction(exports, name);
-    const uid = validatedUid(readAbiString(memory, malloc, free, abiU32(call("pvst_class_uid_size")(classIndex), `class ${classIndex} UID size`),
-      (pointer, capacity) => call("pvst_class_uid_write")(classIndex, pointer, capacity), `class ${classIndex} UID`));
+    const uid = validatedUid(readAbiString(memory, malloc, free, abiU32(call("webvst_class_uid_size")(classIndex), `class ${classIndex} UID size`),
+      (pointer, capacity) => call("webvst_class_uid_write")(classIndex, pointer, capacity), `class ${classIndex} UID`));
     if (classUids.has(uid)) fail(`duplicate class UID ${uid}`);
     classUids.add(uid);
-    const name = readAbiString(memory, malloc, free, abiU32(call("pvst_class_name_size")(classIndex), `class ${uid} name size`),
-      (pointer, capacity) => call("pvst_class_name_write")(classIndex, pointer, capacity), `class ${uid} name`);
-    const vendor = readAbiString(memory, malloc, free, abiU32(call("pvst_class_vendor_size")(classIndex), `class ${uid} vendor size`),
-      (pointer, capacity) => call("pvst_class_vendor_write")(classIndex, pointer, capacity), `class ${uid} vendor`);
-    const parameterCount = abiU32(call("pvst_class_param_count")(classIndex), `class ${uid} parameter count`);
+    const name = readAbiString(memory, malloc, free, abiU32(call("webvst_class_name_size")(classIndex), `class ${uid} name size`),
+      (pointer, capacity) => call("webvst_class_name_write")(classIndex, pointer, capacity), `class ${uid} name`);
+    const vendor = readAbiString(memory, malloc, free, abiU32(call("webvst_class_vendor_size")(classIndex), `class ${uid} vendor size`),
+      (pointer, capacity) => call("webvst_class_vendor_write")(classIndex, pointer, capacity), `class ${uid} vendor`);
+    const parameterCount = abiU32(call("webvst_class_param_count")(classIndex), `class ${uid} parameter count`);
     if (parameterCount > MAX_PARAMETER_COUNT) fail(`class ${uid} parameter count exceeds the maximum ${MAX_PARAMETER_COUNT}`);
     const parameterIds = new Set<number>();
     const parameters: ProbedParameter[] = [];
@@ -198,11 +198,11 @@ export async function probeWasm(wasm: Uint8Array): Promise<ProbedClass[]> {
       parameterIds.add(parameter.parameterId);
       parameters.push(parameter);
     }
-    const kind = abiU32(call("pvst_class_kind")(classIndex), `class ${uid} kind`);
+    const kind = abiU32(call("webvst_class_kind")(classIndex), `class ${uid} kind`);
     if (kind !== 0 && kind !== 1) fail(`class ${uid} has unsupported kind ${kind}`);
     classes.push({ classUid: uid, name, vendor, kind: kind === 1 ? "instrument" : "effect", parameters });
   }
   return classes;
 }
 
-export { PVST_PARAMETER_AUTOMATABLE, PVST_PARAMETER_READ_ONLY };
+export { WEBVST_PARAMETER_AUTOMATABLE, WEBVST_PARAMETER_READ_ONLY };

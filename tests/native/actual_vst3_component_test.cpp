@@ -89,7 +89,7 @@ bool has_signal (const float* samples, int32 begin, int32 end) {
 }
 
 void components_require_exact_stereo_arrangements_and_valid_audio_buffers () {
-  auto* instrument = make_component (prometheos::fixtures::InstrumentComponent::create_instance);
+  auto* instrument = make_component (webvst::fixtures::InstrumentComponent::create_instance);
   auto* instrument_processor = processor_for (instrument);
   SpeakerArrangement stereo = SpeakerArr::kStereo;
   SpeakerArrangement mono = SpeakerArr::kMono;
@@ -110,7 +110,7 @@ void components_require_exact_stereo_arrangements_and_valid_audio_buffers () {
   require (instrument_processor->process (data) == kInvalidArgument);
   instrument_processor->release (); instrument->terminate (); instrument->release ();
 
-  auto* effect = make_component (prometheos::fixtures::EffectComponent::create_instance);
+  auto* effect = make_component (webvst::fixtures::EffectComponent::create_instance);
   auto* effect_processor = processor_for (effect);
   require (effect_processor->setBusArrangements (&stereo, 1, &stereo, 1) == kResultOk);
   require (effect_processor->setBusArrangements (&mono, 1, &mono, 1) != kResultOk);
@@ -129,7 +129,7 @@ void components_require_exact_stereo_arrangements_and_valid_audio_buffers () {
 }
 
 void instrument_applies_note_events_at_their_sample_offsets_and_matches_note_off_identity () {
-  auto* instrument = make_component (prometheos::fixtures::InstrumentComponent::create_instance);
+  auto* instrument = make_component (webvst::fixtures::InstrumentComponent::create_instance);
   auto* processor = processor_for (instrument);
   std::array<float, 128> left {};
   std::array<float, 128> right {};

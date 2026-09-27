@@ -1,4 +1,4 @@
-# Prometheos VST3 WASM SDK notices
+# WebVST VST3 WASM SDK notices
 
 Copyright (c) 2026 Prometheos contributors.
 

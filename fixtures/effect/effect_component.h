@@ -3,7 +3,7 @@
 #include <pluginterfaces/vst/ivstaudioprocessor.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 class EffectComponent final : public Steinberg::Vst::IComponent, public Steinberg::Vst::IAudioProcessor {
 public:
   static Steinberg::FUnknown* create_instance (void*);
@@ -33,4 +33,4 @@ private:
   Steinberg::uint32 refs_ {1};
   double gain_ {.25};
 };
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures

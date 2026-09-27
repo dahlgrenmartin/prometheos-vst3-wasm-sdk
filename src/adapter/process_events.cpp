@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace pvst {
+namespace webvst {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
@@ -166,4 +166,4 @@ tresult FixedParameterChanges::append_point (Queue& queue, int32 offset, ParamVa
   ++point_count_;
   return kResultOk;
 }
-} // namespace pvst
+} // namespace webvst

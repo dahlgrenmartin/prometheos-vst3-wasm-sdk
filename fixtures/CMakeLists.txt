@@ -8,9 +8,9 @@ add_library(actual_vst3_fixture_factory STATIC
 target_compile_features(actual_vst3_fixture_factory PRIVATE cxx_std_17)
 target_include_directories(actual_vst3_fixture_factory PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..
-  ${PVST_VST3_SDK_DIR}
+  ${WEBVST_VST3_SOURCE_DIR}
 )
 if(EMSCRIPTEN)
   target_compile_definitions(actual_vst3_fixture_factory PRIVATE __linux__=1)
 endif()
-pvst_enable_sanitizers(actual_vst3_fixture_factory PRIVATE)
+webvst_enable_sanitizers(actual_vst3_fixture_factory PRIVATE)

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
-#include <prometheos/webvst.h>
+#include <webvst/webvst.h>
 #include <pluginterfaces/base/ibstream.h>
 #include <pluginterfaces/vst/ivstaudioprocessor.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
@@ -402,6 +402,6 @@ private: uint32 refs_ {1};
 inline Factory factory;
 } // namespace fake_vst3
 
-#ifdef PVST_DEFINE_FAKE_FACTORY
+#ifdef WEBVST_DEFINE_FAKE_FACTORY
 extern "C" Steinberg::IPluginFactory* PLUGIN_API GetPluginFactory () { fake_vst3::factory.addRef (); return &fake_vst3::factory; }
 #endif

@@ -3,7 +3,7 @@
 #include <pluginterfaces/vst/ivstaudioprocessor.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 
-namespace prometheos::fixtures {
+namespace webvst::fixtures {
 class InstrumentComponent final : public Steinberg::Vst::IComponent, public Steinberg::Vst::IAudioProcessor {
 public:
   static Steinberg::FUnknown* create_instance (void*);
@@ -39,4 +39,4 @@ private:
   Steinberg::int32 note_id_ {-1};
   bool playing_ {};
 };
-} // namespace prometheos::fixtures
+} // namespace webvst::fixtures

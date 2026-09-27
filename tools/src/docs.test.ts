@@ -26,9 +26,9 @@ function trackedSourcePaths(): string[] {
 
 describe("published SDK contract documentation", () => {
   it("documents every exported ABI declaration with its exact signature", async () => {
-    const header = await text("include/prometheos/webvst.h");
+    const header = await text("include/webvst/webvst.h");
     const documentation = await text("docs/abi-v1.md");
-    const declarations = [...header.matchAll(/^\s*((?:uint32_t|int32_t|float|void)\s+pvst_[a-z0-9_]+\s*\([^;]*\));/gm)]
+    const declarations = [...header.matchAll(/^\s*((?:uint32_t|int32_t|float|void)\s+webvst_[a-z0-9_]+\s*\([^;]*\));/gm)]
       .map((match) => match[1].replace(/\s+/g, " ").trim());
 
     expect(declarations.length).toBeGreaterThan(0);
@@ -104,7 +104,7 @@ describe("published SDK contract documentation", () => {
     const tracked = trackedSourcePaths();
     // The pinned conformance submodule is upstream source, not SDK-owned, and
     // its gitlink entry is a directory that cannot be read as a file.
-    expect(tracked).toContain("include/prometheos/webvst.h");
+    expect(tracked).toContain("include/webvst/webvst.h");
     expect(tracked).not.toContain("third_party/public.sdk");
     const offenders: string[] = [];
     for (const file of tracked) {

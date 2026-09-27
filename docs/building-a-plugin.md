@@ -26,7 +26,7 @@ EMSCRIPTEN_TOOLCHAIN="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscript
 cmake -S . -B build/wasm -G Ninja \
   -DCMAKE_MAKE_PROGRAM="$NINJA_BIN" \
   -DCMAKE_TOOLCHAIN_FILE="$EMSCRIPTEN_TOOLCHAIN" \
-  -DPVST_BUILD_FIXTURES=ON
+  -DWEBVST_BUILD_FIXTURES=ON
 cmake --build build/wasm --target webvst_fixture_package upstream_adelay_webvst_package
 ```
 
@@ -38,14 +38,14 @@ returned by that job's installation rather than a local user path.
 
 Build a static library containing the adapter sources and your VST3 component,
 controller, and `GetPluginFactory()` implementation. Include
-`include/prometheos/webvst.h`, the exact resolved VST3 SDK source, and C++17.
+`include/webvst/webvst.h`, the exact resolved VST3 SDK source, and C++17.
 Your factory may expose instruments and effects, but the adapter accepts only
 one main stereo output, and at most one main stereo input for effects. It uses
 realtime 32-bit processing and a maximum block size of 128 frames. GUI,
 multiple buses, non-stereo buses, sample64, and native binary loading are not
 part of ABI v1.
 
-Configure the plugin target with `prometheos_configure_webvst(target)` from
+Configure the plugin target with `webvst_configure_target(target)` from
 `cmake/WebVstToolchain.cmake`. This emits a standalone WASM module with the
 ABI exports, malloc/free, `_initialize`, no entry point, memory growth, and no
 filesystem by default. The module must not add imports outside the allowlist
