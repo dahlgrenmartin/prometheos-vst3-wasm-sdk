@@ -2,7 +2,8 @@ import { AccessibilityProjection } from "./accessibility.js";
 import { DeclarativeEditor } from "./editor.js";
 import { renderCanvas,validateDisplayList,validateSemantics } from "./graphics.js";
 import { CustomSession, type WorkerPort } from "./session.js";
-import { CORE_CAPABILITIES,type Diagnostics,type DisplayList,type InputEvent,type ParameterHost,type SemanticTree } from "./types.js";
+import { CORE_CAPABILITIES,type Diagnostics,type DisplayList,type InputEvent,type ParameterHost,type ProgramHost,type SemanticTree } from "./types.js";
+import { PROGRAMS_CAPABILITY,programEvent,validateHostRequest } from "./programs.js";
 import type { AssetCache } from "./assets.js";
 export interface EditorOptions {
   container:HTMLElement;parameters:ParameterHost;document?:unknown;
@@ -10,6 +11,8 @@ export interface EditorOptions {
   custom?:{wasm:Uint8Array;requiredCapabilities?:string[];optionalCapabilities?:string[]};
   capabilities?:string[];createWorker?:()=>WorkerPort;disableCustom?:boolean;
   assets?:AssetCache;assetIds?:string[];timeoutMs?:number;
+  /** Optional host program (preset) service; negotiated as host.programs/1. */
+  programs?:ProgramHost;
 }
 let serial=0;
 export function mountEditor(options:EditorOptions) {
@@ -46,10 +49,13 @@ export function mountEditor(options:EditorOptions) {
   canvas.addEventListener("wheel",e=>{if(!customReady)return;e.preventDefault();const b=canvas.getBoundingClientRect(),unit=e.deltaMode===1?16:e.deltaMode===2?b.height:1;input({type:"wheel",x:e.clientX-b.left,y:e.clientY-b.top,deltaX:e.deltaX*unit,deltaY:e.deltaY*unit,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey})},{signal:abort.signal,passive:false});
   function fallback(code:string){customReady=false;session=undefined;editor.parameters.cancel();diagnostic(code);resize(width,height,scale);schedule()}
   const unsubscribe=options.parameters.subscribe((id,value)=>{if(customReady)session?.send({type:"parameter",id:Number(id),value})});
+  const sendProgram=()=>{if(customReady&&options.programs){const {category,program}=options.programs.current();session?.send({type:"event",event:{type:"program",category,program}})}};
+  const unsubscribePrograms=options.programs?.subscribe(sendProgram)??(()=>{});
   if(options.custom&&!options.disableCustom){
-    const capabilities=options.capabilities??[...CORE_CAPABILITIES];
+    const capabilities=options.capabilities??[...CORE_CAPABILITIES,...(options.programs?[PROGRAMS_CAPABILITY]:[])];
     session=new CustomSession({createWorker:options.createWorker??(()=>new Worker(new URL("./worker-entry.ts",import.meta.url),{type:"module"}) as unknown as WorkerPort),requiredCapabilities:options.custom.requiredCapabilities??[],capabilities,timeoutMs:options.timeoutMs,onFallback:fallback,onMessage:m=>{
-      if(m.type==="ready") {customReady=true;session?.send({type:"configure",parameters:options.parameters.metadata.map(({format,...p})=>p)});for(const p of options.parameters.metadata)session?.send({type:"parameter",id:Number(p.id),value:options.parameters.get(p.id)});resize(width,height,scale)}
+      if(m.type==="ready") {customReady=true;session?.send({type:"configure",parameters:options.parameters.metadata.map(({format,...p})=>p)});for(const p of options.parameters.metadata)session?.send({type:"parameter",id:Number(p.id),value:options.parameters.get(p.id)});if(options.programs&&capabilities.includes(PROGRAMS_CAPABILITY)){try{session?.send({type:"event",event:programEvent(options.programs.categories)});sendProgram()}catch(e){diagnostic("UI_PROGRAMS_BUDGET_EXCEEDED",String(e))}}resize(width,height,scale)}
+      else if(m.type==="host-request") {try{const r=validateHostRequest(m.value);const list=options.programs?.categories;if(!list||!capabilities.includes(PROGRAMS_CAPABILITY)||r.category>=list.length||r.program>=list[r.category]!.programs.length)throw Error("UI_REQUEST_INVALID");options.programs!.select(r.category,r.program)}catch(e){diagnostic("UI_REQUEST_INVALID",String(e))}}
       else if(m.type==="submit") {try{if(m.kind===1)pendingDisplay=validateDisplayList(m.value);else if(m.kind===2)pendingSemantics=validateSemantics(m.value)}catch(e){invalidFrame=true;diagnostic("UI_DISPLAY_LIST_INVALID",String(e))}}
       else if(m.type==="diagnostic"){invalidFrame=true;diagnostic(m.code)}
       else if(m.type==="done"&&m.frame){if(!invalidFrame&&pendingDisplay&&pendingSemantics){customDisplay=pendingDisplay;customSemantics=pendingSemantics;if(visible)paint(customDisplay,customSemantics)}pendingDisplay=undefined;pendingSemantics=undefined;invalidFrame=false}
@@ -63,6 +69,6 @@ export function mountEditor(options:EditorOptions) {
     canvas,resize,
     get mode(){return customReady?"custom":options.document?"declarative":"generated"},
     setVisible(value:boolean){visible=value;if(!value){input({type:"blur"});editor.parameters.cancel();cancelAnimationFrame(raf);raf=0}else schedule()},
-    dispose(){if(ended)return;ended=true;cancelAnimationFrame(raf);session?.dispose();unsubscribe();editor.dispose();accessibility.dispose();abort.abort();releases.forEach(release=>release());surface.remove()},
+    dispose(){if(ended)return;ended=true;cancelAnimationFrame(raf);session?.dispose();unsubscribe();unsubscribePrograms();editor.dispose();accessibility.dispose();abort.abort();releases.forEach(release=>release());surface.remove()},
   };
 }

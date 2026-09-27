@@ -41,3 +41,12 @@ it("preserves ordered reliable messages and bounds in-flight frame requests",()=
   s.frame(1);s.frame(2);expect(w.postMessage.mock.calls.filter(c=>c[0].type==="frame")).toHaveLength(1);
   w.onmessage({data:{type:"done"}});s.frame(3);expect(w.postMessage.mock.calls.filter(c=>c[0].type==="frame")).toHaveLength(2);s.dispose();
 });
+import {validateHostRequest,programEvent,HOST_REQUEST_KIND} from "../src/programs";
+it("accepts only well-formed program requests and bounds program lists",()=>{
+  expect(HOST_REQUEST_KIND).toBe(3);
+  expect(validateHostRequest({type:"program",category:2,program:7})).toEqual({type:"program",category:2,program:7});
+  for(const bad of [null,{type:"program",category:-1,program:0},{type:"program",category:0,program:1.5},{type:"load",category:0,program:0},{type:"program",category:0,program:0,url:"x"}])
+    expect(()=>validateHostRequest(bad)).toThrow(/UI_REQUEST_INVALID/);
+  expect(programEvent([{name:"Pads",programs:["Bell Pad"]}])).toEqual({type:"programs",categories:[{name:"Pads",programs:["Bell Pad"]}]});
+  expect(()=>programEvent([{name:"x",programs:Array(65537).fill("p")}])).toThrow(/BUDGET/);
+});

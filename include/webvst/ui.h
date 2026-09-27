@@ -63,6 +63,29 @@ private:
   std::vector<Component*> children_; bool visible_=true,enabled_=true,focusable_=false; double scale_=1;
   void connect(Runtime*);
 };
+struct ProgramCategory { std::string name; std::vector<std::string> programs; };
+// Host program (preset) service, negotiated as host.programs/1. The host owns the
+// selection: select() is a request and the host publishes the canonical result.
+class Programs {
+public:
+  using Request=std::function<int(int,int)>;
+  bool available() const { return !categories_.empty(); }
+  const std::vector<ProgramCategory>& categories() const { return categories_; }
+  int category() const { return category_; } int program() const { return program_; }
+  // Name of the current program, or empty when none is known.
+  std::string name() const;
+  bool select(int category,int program);
+  // Moves by delta through all programs in order, crossing category boundaries.
+  bool step(int delta);
+  void listen(std::function<void()> f) { listeners_.push_back(std::move(f)); }
+  // Runtime side: host publications.
+  void setRequest(Request r) { request_=std::move(r); }
+  void setCategories(std::vector<ProgramCategory>);
+  void publish(int category,int program);
+private:
+  std::vector<ProgramCategory> categories_; int category_=-1,program_=-1; Request request_;
+  std::vector<std::function<void()>> listeners_; void notify();
+};
 struct ParameterMetadata { uint32_t id=0; double defaultValue=0; uint32_t stepCount=0; bool readOnly=false; std::string name; std::vector<std::string> choices; };
 class ParameterAttachment;
 class Parameters {
@@ -73,7 +96,10 @@ public:
   const ParameterMetadata* metadata(uint32_t) const; void cancelAll();
   // Observes canonical host publications (for view state that follows a parameter).
   void listen(std::function<void(uint32_t,double)> f) { listeners_.push_back(std::move(f)); }
+  // Other host services available to the editor.
+  Programs& programs() { return programs_; }
 private:
+  Programs programs_;
   friend class ParameterAttachment;
   Request request_; std::map<uint32_t,double> values_; std::map<uint32_t,ParameterMetadata> metadata_;
   std::vector<ParameterAttachment*> attachments_; std::vector<std::function<void(uint32_t,double)>> listeners_;

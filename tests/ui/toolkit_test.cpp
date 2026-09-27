@@ -59,5 +59,14 @@ int main() {
   parameters.publish(9,.25); assert(heard.size()==1&&heard[0].first==9);
   Graphics faded; faded.save(); faded.setOpacity(.5); faded.rect({0,0,1,1},"#000"); faded.restore(); faded.rect({0,0,1,1},"#000");
   auto json=faded.json(); assert(json.find("\"opacity\":0.5")!=std::string::npos); assert(json.find("opacity")==json.rfind("opacity"));
+  // Programs: requests go to the host; only publication changes the selection.
+  Programs programs; std::vector<std::pair<int,int>> asked; int heardPrograms=0;
+  programs.setRequest([&](int c,int p){asked.push_back({c,p});return 0;}); programs.listen([&]{++heardPrograms;});
+  assert(!programs.select(0,0));
+  programs.setCategories({{"Basses",{"A","B"}},{"Pads",{"C"}}}); programs.publish(0,1);
+  assert(programs.name()=="B"&&heardPrograms==2);
+  assert(programs.step(1)&&asked.back()==std::make_pair(1,0)); assert(programs.category()==0);
+  programs.publish(0,0); assert(programs.step(-1)&&asked.back()==std::make_pair(1,0));
+  assert(!programs.select(1,1)&&!programs.select(2,0));
   Graphics aligned; aligned.text("x",0,0,10,"#fff","sans-serif",Align::Right); assert(aligned.json().find("\"align\":\"right\"")!=std::string::npos);
 }

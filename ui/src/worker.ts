@@ -9,6 +9,7 @@ export function installUiWorker(port:{postMessage:(value:unknown)=>void;onmessag
         if(ui||starting)throw Error("UI_LIFECYCLE_INVALID");starting=true;
         ui=await InlineUi.create(m.wasm,{
           submit:(kind,value)=>port.postMessage({type:"submit",kind,value}),
+          request:value=>port.postMessage({type:"host-request",value}),
           parameter:(op,id,value)=>port.postMessage({type:"request",op,id,value}),
           invalidate:()=>port.postMessage({type:"invalidate"}),
           diagnostic:code=>port.postMessage({type:"diagnostic",code}),

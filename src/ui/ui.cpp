@@ -50,6 +50,12 @@ bool Component::hasFocus()const{return runtime_&&runtime_->focused()==this;}
 void Component::grabFocus(){if(runtime_)runtime_->focus(this);}
 void Component::capturePointer(uint32_t id){if(runtime_)runtime_->capture(this,id);}
 void Component::releasePointer(uint32_t id){if(runtime_)runtime_->release(this,id);}
+std::string Programs::name()const{if(category_<0||size_t(category_)>=categories_.size())return "";auto& c=categories_[size_t(category_)];return program_>=0&&size_t(program_)<c.programs.size()?c.programs[size_t(program_)]:"";}
+bool Programs::select(int c,int p){if(c<0||size_t(c)>=categories_.size()||p<0||size_t(p)>=categories_[size_t(c)].programs.size()||!request_)return false;return request_(c,p)>=0;}
+bool Programs::step(int delta){if(!available())return false;int c=std::max(0,category_),p=std::max(0,program_);while(delta!=0){if(delta>0){if(size_t(++p)>=categories_[size_t(c)].programs.size()){p=0;c=int((size_t(c)+1)%categories_.size());}--delta;}else{if(--p<0){c=int((size_t(c)+categories_.size()-1)%categories_.size());p=int(categories_[size_t(c)].programs.size())-1;}++delta;}if(categories_[size_t(c)].programs.empty())p=0;}return select(c,p);}
+void Programs::setCategories(std::vector<ProgramCategory> c){categories_=std::move(c);if(category_>=0&&size_t(category_)>=categories_.size())category_=program_=-1;notify();}
+void Programs::publish(int c,int p){if(c<0||size_t(c)>=categories_.size())return;category_=c;program_=p;notify();}
+void Programs::notify(){auto copy=listeners_;for(auto& f:copy)f();}
 void Parameters::define(ParameterMetadata m){metadata_[m.id]=std::move(m);}
 const ParameterMetadata* Parameters::metadata(uint32_t id)const{auto i=metadata_.find(id);return i==metadata_.end()?nullptr:&i->second;}
 double Parameters::get(uint32_t id)const{auto i=values_.find(id);if(i!=values_.end())return i->second;auto* m=metadata(id);return m?m->defaultValue:0;}

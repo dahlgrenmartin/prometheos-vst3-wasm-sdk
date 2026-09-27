@@ -29,6 +29,14 @@ export interface SemanticTree { version:1; nodes:SemanticNode[] }
 export type Command = {op:string;[key:string]:unknown};
 export interface DisplayList { version:1; commands:Command[] }
 export interface Frame { display:DisplayList; semantics:SemanticTree }
+export interface ProgramCategory { name:string; programs:string[] }
+/** Host-owned program (preset) service. Selection is canonical on the host, like parameters. */
+export interface ProgramHost {
+  categories:readonly ProgramCategory[];
+  current():{category:number;program:number};
+  select(category:number,program:number):void;
+  subscribe(listener:()=>void):()=>void;
+}
 export interface Diagnostic { severity:"warning"|"error"; subsystem:string; packageId:string; editorId:string; componentId?:string; code:string; message:string }
 export type Diagnostics = (diagnostic:Diagnostic)=>void;
 export const CORE_CAPABILITIES = ["webvst-ui-core/1","input.keyboard/1","accessibility/1","graphics.paths/1","graphics.images/1","assets.fonts/1"] as const;

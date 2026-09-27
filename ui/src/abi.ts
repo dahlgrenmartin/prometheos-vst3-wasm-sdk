@@ -1,6 +1,7 @@
 import { validateDisplayList,validateSemantics } from "./graphics.js";
+import { HOST_REQUEST_KIND,validateHostRequest,type HostRequest } from "./programs.js";
 import type { InputEvent, ParameterInfo } from "./types.js";
-export interface AbiCallbacks {submit:(kind:number,value:unknown)=>void;parameter:(op:number,id:number,value:number)=>void;invalidate:()=>void;diagnostic?:(code:string)=>void}
+export interface AbiCallbacks {request?:(value:HostRequest)=>void;submit:(kind:number,value:unknown)=>void;parameter:(op:number,id:number,value:number)=>void;invalidate:()=>void;diagnostic?:(code:string)=>void}
 type Exports=Record<string,WebAssembly.ExportValue> & {memory:WebAssembly.Memory;wvui_version:()=>number;wvui_alloc:(bytes:number)=>number;wvui_free:(ptr:number,bytes:number)=>void;wvui_create:()=>number;wvui_destroy:(handle:number)=>void;wvui_resize:(handle:number,width:number,height:number,scale:number)=>void;wvui_event:(handle:number,ptr:number,bytes:number)=>void;wvui_parameter:(handle:number,id:number,value:number)=>void;wvui_frame:(handle:number,time:number)=>void;_initialize?:()=>void};
 const required=["wvui_version","wvui_alloc","wvui_free","wvui_create","wvui_destroy","wvui_resize","wvui_event","wvui_parameter","wvui_frame"];
 /** Validate declared memory limits before instantiation can allocate attacker-selected pages. */
@@ -22,8 +23,8 @@ export class InlineUi {
     const self=new InlineUi(callbacks,maxMemoryBytes);
     const instance=await WebAssembly.instantiate(module,{webvst_ui:{
       submit:(kind:number,ptr:number,len:number)=>{
-        try {const parsed=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(self.read(ptr,len,4*1024*1024)));if(kind===1)validateDisplayList(parsed);else if(kind===2)validateSemantics(parsed);else return -1;callbacks.submit(kind,parsed);return 0}
-        catch {callbacks.diagnostic?.(kind===2?"UI_ACCESSIBILITY_INVALID":"UI_DISPLAY_LIST_INVALID");return -1}
+        try {const parsed=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(self.read(ptr,len,kind===HOST_REQUEST_KIND?4096:4*1024*1024)));if(kind===HOST_REQUEST_KIND){if(!callbacks.request)return -1;callbacks.request(validateHostRequest(parsed));return 0}if(kind===1)validateDisplayList(parsed);else if(kind===2)validateSemantics(parsed);else return -1;callbacks.submit(kind,parsed);return 0}
+        catch {callbacks.diagnostic?.(kind===HOST_REQUEST_KIND?"UI_REQUEST_INVALID":kind===2?"UI_ACCESSIBILITY_INVALID":"UI_DISPLAY_LIST_INVALID");return -1}
       },
       parameter:(op:number,id:number,value:number)=>{if(![0,1,2].includes(op)||!self.knownParameters.has(id)||!Number.isFinite(value))return -1;callbacks.parameter(op,id,Math.max(0,Math.min(1,value)));return 0},
       invalidate:()=>callbacks.invalidate(),
