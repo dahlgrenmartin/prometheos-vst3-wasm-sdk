@@ -76,6 +76,7 @@ else()
   # native build without CMAKE_BUILD_TYPE defines none, so pick one here, as the
   # upstream SDK's own CMake would.
   target_compile_definitions(upstream_adelay_vst3_support PUBLIC $<IF:$<CONFIG:Debug>,DEVELOPMENT=1,RELEASE=1>)
+  target_compile_definitions(upstream_adelay_factory PRIVATE $<IF:$<CONFIG:Debug>,DEVELOPMENT=1,RELEASE=1>)
   add_library(steinberg_adelay_vst3 MODULE
     $<TARGET_OBJECTS:upstream_adelay_factory>)
   target_link_libraries(steinberg_adelay_vst3 PRIVATE upstream_adelay_vst3_support)
