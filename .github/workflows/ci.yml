@@ -22,6 +22,12 @@ jobs:
         with:
           submodules: recursive
 
+      # pnpm must exist before setup-node, whose pnpm cache resolves the store path with it.
+      - name: Install pinned pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -40,11 +46,9 @@ jobs:
           version: ${{ env.EMSCRIPTEN_VERSION }}
           actions-cache-folder: emsdk-cache
 
-      - name: Install pinned pnpm and Ninja
+      - name: Install pinned Ninja
         shell: bash
         run: |
-          corepack enable
-          corepack prepare "pnpm@${PNPM_VERSION}" --activate
           python -m pip install --disable-pip-version-check --target "${RUNNER_TEMP}/ninja" "ninja==${NINJA_VERSION}"
           echo "${RUNNER_TEMP}/ninja/bin" >> "${GITHUB_PATH}"
           echo "pnpm=$(pnpm --version)"
