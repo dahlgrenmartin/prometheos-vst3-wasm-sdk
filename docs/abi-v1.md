@@ -136,6 +136,28 @@ magic or version, and any length that does not exactly consume the input before
 calling VST3. A VST3 state failure returns `WEBVST_ERROR_PLUGIN`; malformed input
 returns `WEBVST_ERROR_ARGUMENT`.
 
+## Optional extension: plugin messages (`webvst-ext-message-1`)
+
+A module may additionally export a request/reply channel its own editor uses
+for information only the running DSP has (display rendering, value text,
+modulation routing). ABI v1 is unchanged; hosts detect the extension by the
+presence of both exports and never require it.
+
+```c
+uint32_t webvst_ext_message(uint32_t handle, const uint8_t* request, uint32_t request_size);
+int32_t webvst_ext_reply_write(uint32_t handle, uint8_t* dst, uint32_t capacity);
+```
+
+`request` is UTF-8 JSON of at most 64 KiB whose meaning the plugin defines; the
+host only carries it (from an editor holding the `dsp.messages/1` UI
+capability). `webvst_ext_message` handles the request and returns the byte size
+of the UTF-8 JSON reply, which stays owned by the instance until the next call;
+`webvst_ext_reply_write` copies it following the `*_write` conventions above.
+Replies are at most 1 MiB. Errors are replies (`{"error":"..."}`), never traps.
+Hosts call it between process blocks, so handlers must be bounded and must not
+allocate unboundedly or block. Messages may change DSP state (for example
+modulation routing); such changes are part of the state blob.
+
 ## Deliberate limits
 
 Only one main stereo output and, for effects, one main stereo input are

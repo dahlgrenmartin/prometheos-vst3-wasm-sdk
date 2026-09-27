@@ -68,5 +68,29 @@ int main() {
   assert(programs.step(1)&&asked.back()==std::make_pair(1,0)); assert(programs.category()==0);
   programs.publish(0,0); assert(programs.step(-1)&&asked.back()==std::make_pair(1,0));
   assert(!programs.select(1,1)&&!programs.select(2,0));
+  // Hover: uncaptured moves track enter/leave; the host's leave clears it; double-click targets the hit.
+  struct Hoverable : Component { std::vector<EventType> seen; using Component::Component; void onEvent(Event& e) override { if(e.phase==EventPhase::Target) seen.push_back(e.type); } };
+  Hoverable h1("h1"),h2("h2"); h1.setBounds({60,80,10,10}); h2.setBounds({80,80,10,10});
+  runtime.root().addAndMakeVisible(h1); runtime.root().addAndMakeVisible(h2);
+  Event hm; hm.type=EventType::PointerMove; hm.pointerId=9; hm.x=65; hm.y=85; runtime.event(hm);
+  assert(h1.isHovered()&&h1.seen.back()==EventType::PointerMove);
+  hm.x=85; runtime.event(hm); assert(!h1.isHovered()&&h2.isHovered());
+  assert(std::find(h1.seen.begin(),h1.seen.end(),EventType::PointerLeave)!=h1.seen.end());
+  assert(std::find(h2.seen.begin(),h2.seen.end(),EventType::PointerEnter)!=h2.seen.end());
+  Event leave; leave.type=EventType::PointerLeave; runtime.event(leave); assert(!h2.isHovered()&&runtime.hovered()==nullptr);
+  Event dbl; dbl.type=EventType::DoubleClick; dbl.x=65; dbl.y=85; runtime.event(dbl); assert(h1.seen.back()==EventType::DoubleClick);
+  hm.x=65; runtime.event(hm); runtime.root().removeChild(h1); assert(runtime.hovered()==nullptr);
+  // JSON and the DSP message channel: bounded requests, replies matched by id.
+  auto parse=[](const std::string& t,Json& out){return parseJson(t.data(),t.size(),out);};
+  Json parsed; assert(parse("{\"a\":[1,2],\"s\":\"x\"}",parsed)&&parsed.get("a")->array.size()==2&&parsed.str("s")=="x");
+  assert(!parse("{\"a\":1} x",parsed));
+  DspChannel channel; std::vector<std::string> sent;
+  channel.setSend([&](uint32_t id,const std::string& body){sent.push_back(std::to_string(id)+":"+body);return 0;});
+  assert(!channel.request("{}",nullptr)); channel.setAvailable(true);
+  bool replied=false; assert(channel.request("{\"q\":1}",[&](bool ok,const Json& body){replied=ok&&body.num("v")==7;}));
+  Json reply; parse("{\"v\":7}",reply); channel.resolve(99,true,reply); assert(!replied);
+  channel.resolve(1,true,reply); assert(replied&&channel.pending()==0&&sent[0]=="1:{\"q\":1}");
+  for(size_t i=0;i<DspChannel::kMaxPending;++i)assert(channel.request("{}",nullptr));
+  assert(!channel.request("{}",nullptr));
   Graphics aligned; aligned.text("x",0,0,10,"#fff","sans-serif",Align::Right); assert(aligned.json().find("\"align\":\"right\"")!=std::string::npos);
 }

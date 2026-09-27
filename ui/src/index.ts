@@ -6,6 +6,7 @@ export * from "./editor.js";
 export * from "./graphics.js";
 export * from "./assets.js";
 export * from "./programs.js";
+export * from "./messages.js";
 export * from "./abi.js";
 export * from "./session.js";
 export * from "./host.js";

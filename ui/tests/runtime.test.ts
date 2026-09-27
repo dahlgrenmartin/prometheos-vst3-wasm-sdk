@@ -50,3 +50,13 @@ it("accepts only well-formed program requests and bounds program lists",()=>{
   expect(programEvent([{name:"Pads",programs:["Bell Pad"]}])).toEqual({type:"programs",categories:[{name:"Pads",programs:["Bell Pad"]}]});
   expect(()=>programEvent([{name:"x",programs:Array(65537).fill("p")}])).toThrow(/BUDGET/);
 });
+import {validateDspMessage,replyEvent,DSP_MESSAGE_KIND} from "../src/messages";
+it("bounds DSP messages and their replies without interpreting the body",()=>{
+  expect(DSP_MESSAGE_KIND).toBe(4);
+  expect(validateDspMessage({id:3,body:{type:"renderOsc",scene:0}})).toEqual({id:3,body:{type:"renderOsc",scene:0}});
+  for(const bad of [null,[],{id:-1,body:1},{id:1.5,body:1},{id:1},{id:1,body:1,extra:2}])expect(()=>validateDspMessage(bad)).toThrow(/UI_MESSAGE_INVALID/);
+  expect(()=>validateDspMessage({id:1,body:"x".repeat(70000)})).toThrow(/BUDGET/);
+  expect(replyEvent(1,{body:{ok:true}})).toEqual({type:"dsp-reply",id:1,body:{ok:true}});
+  expect(replyEvent(1,{error:"boom"})).toEqual({type:"dsp-reply",id:1,error:"boom"});
+  expect(replyEvent(1,{body:"x".repeat(1024*1024+1)})).toEqual({type:"dsp-reply",id:1,error:"UI_REPLY_BUDGET_EXCEEDED"});
+});

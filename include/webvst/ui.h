@@ -10,7 +10,9 @@ struct Rect {
   double x=0,y=0,width=0,height=0;
   bool contains(double px,double py) const;
 };
-enum class EventType { PointerDown, PointerMove, PointerUp, PointerCancel, KeyDown, KeyUp, Wheel, Focus, Blur, Change };
+enum class EventType { PointerDown, PointerMove, PointerUp, PointerCancel, KeyDown, KeyUp, Wheel, Focus, Blur, Change,
+  // Hover tracking (target phase only) and the host's double-click.
+  PointerEnter, PointerLeave, DoubleClick };
 enum class EventPhase { Capture, Target, Bubble };
 struct Event {
   EventType type=EventType::PointerMove; EventPhase phase=EventPhase::Target;
@@ -51,7 +53,7 @@ public:
   void setVisible(bool); bool visible() const { return visible_; }
   void setEnabled(bool); bool enabled() const { return enabled_; }
   void setFocusable(bool f) { focusable_=f; } bool focusable() const { return focusable_ && enabled_; }
-  bool hasFocus() const; void grabFocus(); void capturePointer(uint32_t); void releasePointer(uint32_t);
+  bool hasFocus() const; bool isHovered() const; void grabFocus(); void capturePointer(uint32_t); void releasePointer(uint32_t);
   void repaint();
   virtual void paint(Graphics&) {} virtual void resized() {} virtual void onEvent(Event&) {}
   virtual std::string semantic() const { return ""; }
@@ -62,6 +64,37 @@ private:
   std::string id_,label_; Rect bounds_; Component* parent_=nullptr; Runtime* runtime_=nullptr;
   std::vector<Component*> children_; bool visible_=true,enabled_=true,focusable_=false; double scale_=1;
   void connect(Runtime*);
+};
+// Bounded, strict JSON value: host events and DSP message replies.
+struct Json {
+  enum Type {Null,Number,String,Boolean,Object,Array} type=Null;
+  double number=0; bool boolean=false; std::string string;
+  std::map<std::string,Json> object; std::vector<Json> array;
+  const Json* get(const char* key) const { auto i=object.find(key); return i==object.end()?nullptr:&i->second; }
+  double num(const char* key,double fallback=0) const { auto* v=get(key); return v&&v->type==Number?v->number:fallback; }
+  std::string str(const char* key) const { auto* v=get(key); return v&&v->type==String?v->string:""; }
+};
+// Parses exactly one JSON value spanning the whole input (depth <= 16, bounded node count).
+bool parseJson(const char* data,size_t size,Json& out);
+std::string jsonQuote(const std::string&);
+std::string jsonNumber(double);
+// Request/reply channel to this plugin's own DSP (capability dsp.messages/1). Bodies
+// are plugin-defined JSON; the host only carries them. Replies arrive asynchronously.
+class DspChannel {
+public:
+  using Reply=std::function<void(bool ok,const Json& body)>;
+  using Send=std::function<int(uint32_t id,const std::string& body)>;
+  static constexpr size_t kMaxPending=8;
+  bool available() const { return available_&&send_!=nullptr; }
+  // body is JSON text. False when unavailable or too many requests are pending.
+  bool request(const std::string& body,Reply reply);
+  size_t pending() const { return pending_.size(); }
+  // Runtime side.
+  void setSend(Send s) { send_=std::move(s); }
+  void setAvailable(bool a) { available_=a; }
+  void resolve(uint32_t id,bool ok,const Json& body);
+private:
+  Send send_; bool available_=false; uint32_t next_=1; std::map<uint32_t,Reply> pending_;
 };
 struct ProgramCategory { std::string name; std::vector<std::string> programs; };
 // Host program (preset) service, negotiated as host.programs/1. The host owns the
@@ -98,8 +131,9 @@ public:
   void listen(std::function<void(uint32_t,double)> f) { listeners_.push_back(std::move(f)); }
   // Other host services available to the editor.
   Programs& programs() { return programs_; }
+  DspChannel& dsp() { return dsp_; }
 private:
-  Programs programs_;
+  Programs programs_; DspChannel dsp_;
   friend class ParameterAttachment;
   Request request_; std::map<uint32_t,double> values_; std::map<uint32_t,ParameterMetadata> metadata_;
   std::vector<ParameterAttachment*> attachments_; std::vector<std::function<void(uint32_t,double)>> listeners_;
@@ -153,10 +187,11 @@ public:
   Component& root() { return *root_; } void resize(double,double,double); void event(Event);
   void frame(double); void invalidate(); Component* hitTest(double,double) const;
   void focus(Component*); void capture(Component*,uint32_t); void release(Component*,uint32_t);
-  void detached(Component*); Component* focused() const { return focused_; }
+  void detached(Component*); Component* focused() const { return focused_; } Component* hovered() const { return hovered_; }
 private:
   std::unique_ptr<Component> root_; Parameters& parameters_; Submit submit_; std::function<void()> invalidate_;
-  Component* focused_=nullptr; std::map<uint32_t,Component*> captures_; bool dirty_=true;
+  Component* focused_=nullptr; Component* hovered_=nullptr; std::map<uint32_t,Component*> captures_; bool dirty_=true;
+  void hover(Component*);
   void paintTree(Component&,Graphics&,std::vector<std::string>&); void dispatch(Component*,Event&);
 };
 // Defined by each UI plugin. Child components remain owned by the editor.

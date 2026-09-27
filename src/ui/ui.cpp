@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 namespace webvst {
 namespace {
 std::string number(double v) { char b[48]; std::snprintf(b,sizeof(b),"%.12g",std::isfinite(v)?v:0); return b; }
@@ -15,6 +16,24 @@ Component* find(Component& c,const std::string& id) { if(!c.visible()||!c.enable
 Component* hit(Component& c,double x,double y) {if(!c.visible()||!c.enabled()||!c.globalBounds().contains(x,y))return nullptr;for(auto i=c.children().rbegin();i!=c.children().rend();++i)if(auto* f=hit(**i,x,y))return f;return &c;}
 void focusables(Component& c,std::vector<Component*>& out) {if(!c.visible()||!c.enabled())return;if(c.focusable())out.push_back(&c);for(auto* ch:c.children())focusables(*ch,out);}
 }
+namespace {
+// Bounded, strict JSON reader. No substring field matching: malformed events are discarded.
+struct Reader {
+ const char* p; const char* end; size_t nodes=0;
+ void space(){while(p<end&&(*p==' '||*p=='\n'||*p=='\r'||*p=='\t'))++p;}
+ bool take(char c){space();if(p==end||*p!=c)return false;++p;return true;}
+ bool str(std::string& out){if(!take('"'))return false;while(p<end){unsigned char c=*p++;if(c=='"')return true;if(c<32)return false;if(c!='\\'){out+=char(c);continue;}if(p==end)return false;c=*p++;if(c=='"'||c=='\\'||c=='/')out+=char(c);else if(c=='n')out+='\n';else if(c=='r')out+='\r';else if(c=='t')out+='\t';else if(c=='b')out+='\b';else if(c=='f')out+='\f';else if(c=='u'){unsigned code=0;for(int i=0;i<4;i++){if(p==end)return false;char h=*p++;unsigned n=h>='0'&&h<='9'?h-'0':h>='a'&&h<='f'?h-'a'+10:h>='A'&&h<='F'?h-'A'+10:16;if(n==16)return false;code=code*16+n;}if(code>=0xd800&&code<=0xdfff)return false;if(code<128)out+=char(code);else if(code<2048){out+=char(0xc0|(code>>6));out+=char(0x80|(code&63));}else{out+=char(0xe0|(code>>12));out+=char(0x80|((code>>6)&63));out+=char(0x80|(code&63));}}else return false;}return false;}
+ bool read(Json& out,unsigned depth=0){space();if(p==end||depth>16||++nodes>131072)return false;if(*p=='"'){out.type=Json::String;return str(out.string);}if(*p=='{'){++p;out.type=Json::Object;if(take('}'))return true;do{std::string key;if(!str(key)||!take(':')||out.object.count(key))return false;Json child;if(!read(child,depth+1))return false;out.object.emplace(std::move(key),std::move(child));if(take('}'))return true;}while(take(','));return false;}if(*p=='['){++p;out.type=Json::Array;if(take(']'))return true;do{Json child;if(!read(child,depth+1))return false;out.array.push_back(std::move(child));if(take(']'))return true;}while(take(','));return false;}
+ for(auto literal:{"true","false","null"}){auto q=p;const char* l=literal;while(q<end&&*l&&*q==*l){q++;l++;}if(!*l){p=q;out.type=literal[0]=='n'?Json::Null:Json::Boolean;out.boolean=literal[0]=='t';return true;}}
+ const char* start=p;if(*p=='-')++p;if(p==end)return false;if(*p=='0')++p;else{if(*p<'1'||*p>'9')return false;while(p<end&&*p>='0'&&*p<='9')++p;}if(p<end&&*p=='.'){++p;const char* s=p;while(p<end&&*p>='0'&&*p<='9')++p;if(p==s)return false;}if(p<end&&(*p=='e'||*p=='E')){++p;if(p<end&&(*p=='+'||*p=='-'))++p;const char* s=p;while(p<end&&*p>='0'&&*p<='9')++p;if(s==p)return false;}std::string n(start,p);out.number=std::strtod(n.c_str(),nullptr);out.type=Json::Number;return std::isfinite(out.number);
+ }
+};
+}
+bool parseJson(const char* data,size_t size,Json& out){if(!data)return false;Reader reader{data,data+size};if(!reader.read(out))return false;reader.space();return reader.p==reader.end;}
+std::string jsonQuote(const std::string& s){return quote(s);}
+std::string jsonNumber(double v){return number(v);}
+bool DspChannel::request(const std::string& body,Reply reply){if(!available()||pending_.size()>=kMaxPending)return false;const uint32_t id=next_++;if(next_>0x7fffffff)next_=1;pending_[id]=std::move(reply);if(send_(id,body)<0){pending_.erase(id);return false;}return true;}
+void DspChannel::resolve(uint32_t id,bool ok,const Json& body){auto i=pending_.find(id);if(i==pending_.end())return;auto reply=std::move(i->second);pending_.erase(i);if(reply)reply(ok,body);}
 bool Rect::contains(double px,double py) const {return px>=x&&py>=y&&px<x+width&&py<y+height;}
 void Graphics::add(std::string command) {if(commands_.size()>=65536)return;if(opacity_<1&&command.size()>1&&command.back()=='}'){command.pop_back();command+=",\"opacity\":"+number(opacity_)+"}";}commands_.push_back(std::move(command));}
 void Graphics::save(){opacities_.push_back(opacity_);add("{\"op\":\"save\"}");}
@@ -47,6 +66,7 @@ void Component::setVisible(bool visible){if(visible_==visible)return;if(!visible
 void Component::setEnabled(bool enabled){if(enabled_==enabled)return;if(!enabled&&runtime_)runtime_->detached(this);enabled_=enabled;repaint();}
 void Component::repaint(){if(runtime_)runtime_->invalidate();}
 bool Component::hasFocus()const{return runtime_&&runtime_->focused()==this;}
+bool Component::isHovered()const{return runtime_&&runtime_->hovered()==this;}
 void Component::grabFocus(){if(runtime_)runtime_->focus(this);}
 void Component::capturePointer(uint32_t id){if(runtime_)runtime_->capture(this,id);}
 void Component::releasePointer(uint32_t id){if(runtime_)runtime_->release(this,id);}
@@ -102,10 +122,13 @@ void Runtime::dispatch(Component* target,Event& e){if(!target)return;std::vector
 void Runtime::focus(Component* c){if(c==focused_||(c&&!c->focusable()))return;auto* old=focused_;focused_=c;if(old){Event e;e.type=EventType::Blur;dispatch(old,e);old->repaint();}if(c){Event e;e.type=EventType::Focus;dispatch(c,e);c->repaint();}}
 void Runtime::capture(Component* c,uint32_t id){auto i=captures_.find(id);if(i!=captures_.end()&&i->second!=c){Event e;e.type=EventType::PointerCancel;e.pointerId=id;dispatch(i->second,e);}captures_[id]=c;}
 void Runtime::release(Component* c,uint32_t id){auto i=captures_.find(id);if(i!=captures_.end()&&i->second==c)captures_.erase(i);}
-void Runtime::detached(Component* c){if(descendant(focused_,c))focus(nullptr);auto captures=captures_;for(auto& entry:captures)if(descendant(entry.second,c)){Event e;e.type=EventType::PointerCancel;e.pointerId=entry.first;dispatch(entry.second,e);captures_.erase(entry.first);}invalidate();}
+void Runtime::hover(Component* c){if(c==hovered_)return;auto* old=hovered_;hovered_=c;if(old){Event e;e.type=EventType::PointerLeave;e.phase=EventPhase::Target;old->onEvent(e);old->repaint();}if(c){Event e;e.type=EventType::PointerEnter;e.phase=EventPhase::Target;c->onEvent(e);c->repaint();}}
+void Runtime::detached(Component* c){if(descendant(hovered_,c))hovered_=nullptr;if(descendant(focused_,c))focus(nullptr);auto captures=captures_;for(auto& entry:captures)if(descendant(entry.second,c)){Event e;e.type=EventType::PointerCancel;e.pointerId=entry.first;dispatch(entry.second,e);captures_.erase(entry.first);}invalidate();}
 void Runtime::event(Event e){
  if(e.type==EventType::Blur){focus(nullptr);auto captures=captures_;for(auto& entry:captures){Event cancel;cancel.type=EventType::PointerCancel;cancel.pointerId=entry.first;dispatch(entry.second,cancel);}captures_.clear();parameters_.cancelAll();return;}
  if(e.type==EventType::KeyDown&&e.key=="Tab"){std::vector<Component*> list;focusables(*root_,list);if(!list.empty()){auto i=std::find(list.begin(),list.end(),focused_);int index=i==list.end()?(e.shiftKey?0:-1):int(i-list.begin());focus(list[(index+(e.shiftKey?-1:1)+int(list.size()))%list.size()]);}return;}
+ if(e.type==EventType::PointerLeave){hover(nullptr);return;}
+ if(e.type==EventType::PointerMove&&e.targetId.empty()&&!captures_.count(e.pointerId))hover(hitTest(e.x,e.y));
  Component* target=nullptr;if(!e.targetId.empty())target=find(*root_,e.targetId);else if(e.type==EventType::KeyDown||e.type==EventType::KeyUp||e.type==EventType::Change||e.type==EventType::Focus)target=focused_;else {auto i=captures_.find(e.pointerId);target=i==captures_.end()?hitTest(e.x,e.y):i->second;}if(e.type==EventType::Focus){focus(target);return;}dispatch(target,e);
 }
 void Runtime::paintTree(Component& c,Graphics& g,std::vector<std::string>& semantics){if(!c.visible())return;auto b=c.bounds();g.save();g.translate(b.x,b.y);g.clip({0,0,b.width,b.height});c.paint(g);if(c.contentScale()!=1)g.scale(c.contentScale());auto s=c.semantic();if(!s.empty())semantics.push_back(std::move(s));for(auto* child:c.children())paintTree(*child,g,semantics);g.restore();}

@@ -10,6 +10,7 @@ export function installUiWorker(port:{postMessage:(value:unknown)=>void;onmessag
         ui=await InlineUi.create(m.wasm,{
           submit:(kind,value)=>port.postMessage({type:"submit",kind,value}),
           request:value=>port.postMessage({type:"host-request",value}),
+          message:value=>port.postMessage({type:"dsp-message",value}),
           parameter:(op,id,value)=>port.postMessage({type:"request",op,id,value}),
           invalidate:()=>port.postMessage({type:"invalidate"}),
           diagnostic:code=>port.postMessage({type:"diagnostic",code}),

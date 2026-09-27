@@ -4,6 +4,7 @@ import { renderCanvas,validateDisplayList,validateSemantics } from "./graphics.j
 import { CustomSession, type WorkerPort } from "./session.js";
 import { CORE_CAPABILITIES,type Diagnostics,type DisplayList,type InputEvent,type ParameterHost,type ProgramHost,type SemanticTree } from "./types.js";
 import { PROGRAMS_CAPABILITY,programEvent,validateHostRequest } from "./programs.js";
+import { MAX_MESSAGES_IN_FLIGHT,MESSAGES_CAPABILITY,replyEvent,validateDspMessage,type MessageHost } from "./messages.js";
 import type { AssetCache } from "./assets.js";
 export interface EditorOptions {
   container:HTMLElement;parameters:ParameterHost;document?:unknown;
@@ -13,6 +14,8 @@ export interface EditorOptions {
   assets?:AssetCache;assetIds?:string[];timeoutMs?:number;
   /** Optional host program (preset) service; negotiated as host.programs/1. */
   programs?:ProgramHost;
+  /** Optional request/reply channel to the plugin's DSP; negotiated as dsp.messages/1. */
+  messages?:MessageHost;
 }
 let serial=0;
 export function mountEditor(options:EditorOptions) {
@@ -25,7 +28,7 @@ export function mountEditor(options:EditorOptions) {
   let ended=false,visible=true,raf=0,customReady=false,session:CustomSession|undefined,width=640,height=480,scale=1;
   let pendingDisplay:DisplayList|undefined,pendingSemantics:SemanticTree|undefined,customDisplay:DisplayList|undefined,customSemantics:SemanticTree|undefined,invalidFrame=false;
   const images=new Map<string,CanvasImageSource>(),fonts=new Map<string,string>(),releases:Array<()=>void>=[],missing=new Set<string>();
-  let editor:DeclarativeEditor;
+  let editor:DeclarativeEditor;let inFlight=0;
   const schedule=()=>{if(!ended&&visible&&!raf)raf=requestAnimationFrame(draw)};
   try{editor=new DeclarativeEditor(options.document,options.parameters,schedule)}catch(e){diagnostic("UI_SCHEMA_INVALID",String(e));editor=new DeclarativeEditor(undefined,options.parameters,schedule)}
   function input(event:InputEvent){if(ended)return;if(customReady)session?.send({type:"event",event});else editor.input(event)}
@@ -45,6 +48,10 @@ export function mountEditor(options:EditorOptions) {
   },{signal:abort.signal});
   canvas.addEventListener("lostpointercapture",()=>input({type:"pointercancel"}),{signal:abort.signal});
   canvas.addEventListener("blur",()=>input({type:"blur"}),{signal:abort.signal});
+  canvas.addEventListener("pointerleave",()=>input({type:"pointerleave"}),{signal:abort.signal});
+  // Custom editors own double-click and right-click; the declarative editor keeps browser defaults.
+  canvas.addEventListener("dblclick",e=>{if(!customReady)return;e.preventDefault();const b=canvas.getBoundingClientRect();input({type:"dblclick",x:e.clientX-b.left,y:e.clientY-b.top,button:e.button,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey})},{signal:abort.signal});
+  canvas.addEventListener("contextmenu",e=>{if(customReady)e.preventDefault()},{signal:abort.signal});
   canvas.addEventListener("keydown",e=>{if(e.key==="Tab")return;e.preventDefault();input({type:"keydown",key:e.key,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey})},{signal:abort.signal});
   canvas.addEventListener("wheel",e=>{if(!customReady)return;e.preventDefault();const b=canvas.getBoundingClientRect(),unit=e.deltaMode===1?16:e.deltaMode===2?b.height:1;input({type:"wheel",x:e.clientX-b.left,y:e.clientY-b.top,deltaX:e.deltaX*unit,deltaY:e.deltaY*unit,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey})},{signal:abort.signal,passive:false});
   function fallback(code:string){customReady=false;session=undefined;editor.parameters.cancel();diagnostic(code);resize(width,height,scale);schedule()}
@@ -52,9 +59,15 @@ export function mountEditor(options:EditorOptions) {
   const sendProgram=()=>{if(customReady&&options.programs){const {category,program}=options.programs.current();session?.send({type:"event",event:{type:"program",category,program}})}};
   const unsubscribePrograms=options.programs?.subscribe(sendProgram)??(()=>{});
   if(options.custom&&!options.disableCustom){
-    const capabilities=options.capabilities??[...CORE_CAPABILITIES,...(options.programs?[PROGRAMS_CAPABILITY]:[])];
+    const capabilities=options.capabilities??[...CORE_CAPABILITIES,...(options.programs?[PROGRAMS_CAPABILITY]:[]),...(options.messages?[MESSAGES_CAPABILITY]:[])];
     session=new CustomSession({createWorker:options.createWorker??(()=>new Worker(new URL("./worker-entry.ts",import.meta.url),{type:"module"}) as unknown as WorkerPort),requiredCapabilities:options.custom.requiredCapabilities??[],capabilities,timeoutMs:options.timeoutMs,onFallback:fallback,onMessage:m=>{
-      if(m.type==="ready") {customReady=true;session?.send({type:"configure",parameters:options.parameters.metadata.map(({format,...p})=>p)});for(const p of options.parameters.metadata)session?.send({type:"parameter",id:Number(p.id),value:options.parameters.get(p.id)});if(options.programs&&capabilities.includes(PROGRAMS_CAPABILITY)){try{session?.send({type:"event",event:programEvent(options.programs.categories)});sendProgram()}catch(e){diagnostic("UI_PROGRAMS_BUDGET_EXCEEDED",String(e))}}resize(width,height,scale)}
+      if(m.type==="ready") {customReady=true;session?.send({type:"event",event:{type:"capabilities",list:capabilities}});session?.send({type:"configure",parameters:options.parameters.metadata.map(({format,...p})=>p)});for(const p of options.parameters.metadata)session?.send({type:"parameter",id:Number(p.id),value:options.parameters.get(p.id)});if(options.programs&&capabilities.includes(PROGRAMS_CAPABILITY)){try{session?.send({type:"event",event:programEvent(options.programs.categories)});sendProgram()}catch(e){diagnostic("UI_PROGRAMS_BUDGET_EXCEEDED",String(e))}}resize(width,height,scale)}
+      else if(m.type==="dsp-message") {
+        let id=-1;
+        try{const r=validateDspMessage(m.value);id=r.id;if(!options.messages||!capabilities.includes(MESSAGES_CAPABILITY))throw Error("UI_CAPABILITY_MISSING");if(inFlight>=MAX_MESSAGES_IN_FLIGHT||!visible)throw Error("UI_MESSAGE_REFUSED");inFlight++;const owner=session;
+          options.messages.request(r.body).then(body=>replyEvent(id,{body}),error=>replyEvent(id,{error:error instanceof Error?error.message:String(error)})).then(event=>{inFlight--;if(!ended&&customReady&&session===owner)session?.send({type:"event",event})})}
+        catch(e){diagnostic("UI_MESSAGE_INVALID",String(e));if(id>=0)session?.send({type:"event",event:replyEvent(id,{error:e instanceof Error?e.message:String(e)})})}
+      }
       else if(m.type==="host-request") {try{const r=validateHostRequest(m.value);const list=options.programs?.categories;if(!list||!capabilities.includes(PROGRAMS_CAPABILITY)||r.category>=list.length||r.program>=list[r.category]!.programs.length)throw Error("UI_REQUEST_INVALID");options.programs!.select(r.category,r.program)}catch(e){diagnostic("UI_REQUEST_INVALID",String(e))}}
       else if(m.type==="submit") {try{if(m.kind===1)pendingDisplay=validateDisplayList(m.value);else if(m.kind===2)pendingSemantics=validateSemantics(m.value)}catch(e){invalidFrame=true;diagnostic("UI_DISPLAY_LIST_INVALID",String(e))}}
       else if(m.type==="diagnostic"){invalidFrame=true;diagnostic(m.code)}
