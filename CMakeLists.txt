@@ -27,6 +27,7 @@ if(EMSCRIPTEN)
   # the portable non-COM interface layout used by this standalone WASM build.
   target_compile_definitions(webvst_adapter PRIVATE __linux__=1)
 endif()
+include(cmake/WebVstUi.cmake)
 function(webvst_enable_sanitizers target visibility)
   if(NOT WEBVST_ENABLE_SANITIZERS)
     return()

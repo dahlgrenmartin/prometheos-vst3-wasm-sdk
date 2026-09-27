@@ -51,7 +51,7 @@ Each optional `artifact` has required `id`, `path`, `sha256`, and `role`.
 `resources/`, respectively. The archive verifier also permits undeclared files
 under `resources/`, `presets/`, and `licenses/` so a package can carry those
 supporting files. All other entries must be declared by the manifest as the
-module or an artifact.
+module, an artifact, or a UI extension file. Undeclared files under `assets/` remain rejected.
 
 ## Schema property inventory
 
@@ -70,6 +70,7 @@ makes additions reviewable without relying on a prose occurrence elsewhere.
 | `module` | Module descriptor. |
 | `classes` | Class descriptors. |
 | `artifacts` | Optional artifact descriptors. |
+| `ui` | Optional independently versioned UI extension; see [UI package v1](ui-package-v1.md). |
 
 ### `module` object
 
@@ -211,3 +212,49 @@ Builds must compare the complete archive bytes or SHA-256 after two clean
 rebuilds. The repository's conformance tests additionally verify ABI metadata,
 imports, stereo processing boundary sizes, state round trips, and archive
 entries.
+
+## Optional UI extension property inventory
+
+The extension is independently versioned and does not change the frozen DSP ABI.
+See [UI package v1](ui-package-v1.md) for validation and fallback rules.
+
+### `uiFile` object
+
+| Property | Meaning |
+| --- | --- |
+| `path` | Safe relative package path. |
+| `sha256` | SHA-256 digest. |
+
+### `uiCustom` object
+
+| Property | Meaning |
+| --- | --- |
+| `path` | Safe relative custom module path. |
+| `sha256` | SHA-256 digest. |
+| `abi` | Exact string `webvst-ui-1`. |
+| `requiredCapabilities` | Required versioned capability names, including `webvst-ui-core/1`. |
+| `optionalCapabilities` | Optional versioned capability names. |
+
+### `uiClass` object
+
+| Property | Meaning |
+| --- | --- |
+| `classUid` | Existing manifest class UID. |
+| `document` | Mandatory complete declarative fallback document. |
+| `custom` | Optional custom UI module. |
+
+### `uiAsset` object
+
+| Property | Meaning |
+| --- | --- |
+| `path` | Safe relative asset path. |
+| `sha256` | SHA-256 digest. |
+| `type` | Image, font, or binary asset kind. |
+
+### `ui` object
+
+| Property | Meaning |
+| --- | --- |
+| `version` | UI package extension version `1`. |
+| `classes` | Per-class UI declarations. |
+| `assets` | Optional map from logical asset IDs to file descriptors. |

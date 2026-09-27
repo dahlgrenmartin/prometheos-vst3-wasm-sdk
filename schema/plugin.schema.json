@@ -11,7 +11,8 @@
     "abi": { "const": "webvst-vst3-wasm-1" },
     "module": { "$ref": "#/$defs/module" },
     "classes": { "type": "array", "items": { "$ref": "#/$defs/class" } },
-    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } },
+    "ui": { "$ref": "#/$defs/ui" }
   },
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
@@ -81,6 +82,144 @@
     "artifact": {
       "type": "object", "additionalProperties": false, "required": ["id", "path", "sha256", "role"],
       "properties": { "id": { "type": "string" }, "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" }, "role": { "enum": ["preset", "resource"] } }
+    },
+    "uiFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "uiCustom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "abi",
+        "requiredCapabilities",
+        "optionalCapabilities"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "abi": {
+          "const": "webvst-ui-1"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uiCapability"
+          }
+        },
+        "optionalCapabilities": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uiCapability"
+          }
+        }
+      }
+    },
+    "uiCapability": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9.-]*/[1-9][0-9]*$"
+    },
+    "uiClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classUid",
+        "document"
+      ],
+      "properties": {
+        "classUid": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "document": {
+          "$ref": "#/$defs/uiFile"
+        },
+        "custom": {
+          "$ref": "#/$defs/uiCustom"
+        }
+      }
+    },
+    "uiAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "type"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "type": {
+          "enum": [
+            "image",
+            "font",
+            "binary"
+          ]
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "classes"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "classes": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/uiClass"
+          }
+        },
+        "assets": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/uiAsset"
+          }
+        }
+      }
     }
   }
 }

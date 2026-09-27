@@ -3,6 +3,7 @@ import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { mapParameter, validateManifest } from "./manifest.js";
+import { uiFiles, validateUiDocument, validateUiWasm } from "./ui.js";
 import { probeWasm, WEBVST_PARAMETER_AUTOMATABLE, WEBVST_PARAMETER_READ_ONLY } from "./probe.js";
 import { BUZZ_EXTENSION, WEBVST_ABI, type ProbedParameter, type WebVstManifestV1, type WebVstParameter } from "./types.js";
 
@@ -167,6 +168,7 @@ function manifestPath(manifest: WebVstManifestV1, path: string, label: string): 
 function expectedPath(name: string, manifest: WebVstManifestV1): boolean {
   if (name === "plugin.json" || name === manifest.module.path) return true;
   if ((manifest.artifacts ?? []).some((artifact) => artifact.path === name)) return true;
+  if (uiFiles(manifest).some((file) => file.path === name)) return true;
   return ["resources/", "presets/", "licenses/"].some((prefix) => name.startsWith(prefix));
 }
 
@@ -192,6 +194,7 @@ function parseManifest(entries: ArchiveEntry[]): { manifest: WebVstManifestV1; b
   }
   if (!byName.has(manifest.module.path)) fail(`module is missing: ${manifest.module.path}`);
   for (const artifact of manifest.artifacts ?? []) if (!byName.has(artifact.path)) fail(`artifact is missing: ${artifact.path}`);
+  for (const file of uiFiles(manifest)) if (!byName.has(file.path)) fail(`UI artifact is missing: ${file.path}`);
   const artifactsById = new Map((manifest.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   for (const manifestClass of manifest.classes) {
     for (const category of manifestClass.programs?.categories ?? []) {
@@ -241,8 +244,21 @@ async function verifyEntries(entries: ArchiveEntry[]): Promise<{ manifest: WebVs
   for (const artifact of manifest.artifacts ?? []) {
     if (sha256(byName.get(artifact.path)!) !== artifact.sha256) fail(`hash mismatch for ${artifact.path}`);
   }
+  for (const file of uiFiles(manifest)) {
+    if (sha256(byName.get(file.path)!) !== file.sha256) fail(`UI hash mismatch for ${file.path}`);
+  }
   if (manifest.abi !== WEBVST_ABI) fail(`ABI mismatch: ${manifest.abi}`);
   const probed = await probeWasm(module);
+  for (const entry of manifest.ui?.classes ?? []) {
+    const bytes = byName.get(entry.document.path)!;
+    if (bytes.byteLength > 4 * 1024 * 1024) fail("UI document exceeds 4 MiB");
+    let document: unknown;
+    try { document = JSON.parse(textDecoder.decode(bytes)); } catch { fail("UI document is not valid UTF-8 JSON"); }
+    const metadata = probed.find(candidate => candidate.classUid === entry.classUid);
+    if (!metadata) fail(`UI references unknown probed class ${entry.classUid}`);
+    validateUiDocument(document, manifest, entry.classUid, metadata);
+    if (entry.custom) await validateUiWasm(byName.get(entry.custom.path)!);
+  }
   if (probed.length !== manifest.classes.length) fail("class count mismatch");
   for (let classIndex = 0; classIndex < manifest.classes.length; classIndex += 1) {
     const expected = manifest.classes[classIndex];

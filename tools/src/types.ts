@@ -77,12 +77,28 @@ export interface WebVstManifestV1 {
     sha256: string;
   };
   classes: WebVstManifestClass[];
+  ui?: WebVstUiExtension;
   artifacts?: Array<{
     id: string;
     path: string;
     sha256: string;
     role: "preset" | "resource";
   }>;
+}
+
+export interface WebVstUiFile { path: string; sha256: string }
+export interface WebVstUiExtension {
+  version: 1;
+  classes: Array<{
+    classUid: string;
+    document: WebVstUiFile;
+    custom?: WebVstUiFile & {
+      abi: "webvst-ui-1";
+      requiredCapabilities: string[];
+      optionalCapabilities: string[];
+    };
+  }>;
+  assets?: Record<string, WebVstUiFile & { type: "image" | "font" | "binary" }>;
 }
 
 export interface AuthorParameterCuration {

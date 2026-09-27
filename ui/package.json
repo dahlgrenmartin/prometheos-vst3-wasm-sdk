@@ -1,0 +1,11 @@
+{
+  "name": "@prometheos/webvst-ui",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {".": "./src/index.ts", "./worker": "./src/worker.ts", "./worker-entry": "./src/worker-entry.ts"},
+  "scripts": {
+    "test": "node ../tools/node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "typecheck": "node ../tools/node_modules/typescript/bin/tsc -p tsconfig.json"
+  }
+}

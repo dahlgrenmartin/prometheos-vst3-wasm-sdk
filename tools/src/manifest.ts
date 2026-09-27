@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { uiExtensionSchema, validateUiManifest } from "./ui.js";
 import {
   WEBVST_PARAMETER_AUTOMATABLE,
   WEBVST_PARAMETER_READ_ONLY,
@@ -75,6 +76,7 @@ const manifestSchema = z.object({
   schemaVersion: z.literal(1), packageId: z.string().regex(PACKAGE_ID), version: z.string().min(1), abi: z.literal(WEBVST_ABI),
   module: z.object({ path: z.string().min(1), sha256: z.string().regex(SHA256) }).strict(),
   classes: z.array(classSchema),
+  ui: uiExtensionSchema.optional(),
   artifacts: z.array(z.object({ id: z.string(), path: z.string(), sha256: z.string().regex(SHA256), role: z.enum(["preset", "resource"]) }).strict()).optional(),
 }).strict();
 
@@ -106,6 +108,7 @@ export function validateManifest(value: unknown): WebVstManifestV1 {
     if (artifactIds.has(artifact.id)) fail(`duplicate artifact ID ${artifact.id}`);
     artifactIds.add(artifact.id);
   }
+  validateUiManifest(manifest);
   return manifest;
 }
 
